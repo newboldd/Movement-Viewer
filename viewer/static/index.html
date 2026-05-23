@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movement Viewer</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=4">
+    <link rel="stylesheet" href="/static/css/main.css?v=5">
 </head>
 <body>
     <div class="viewer-outer">
@@ -52,17 +52,22 @@
                 <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)" disabled>OS | OD</button>
                 <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)" disabled>Reset Zoom</button>
 
-                <div class="spacer"></div>
+                <div class="divider"></div>
 
-                <!-- Order: Export → Stereo → Load Video (Load Video stays last so it's the most reachable). -->
                 <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
                 <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
                 <span id="exportStatus"></span>
 
-                <select class="btn btn-sm recent-select" id="recentSelect"
-                        title="Recently loaded videos" disabled>
-                    <option value="">No recent videos</option>
-                </select>
+                <div class="spacer"></div>
+
+                <div class="recent-picker" id="recentPicker">
+                    <button class="btn btn-sm recent-toggle" id="recentToggleBtn"
+                            type="button" title="Recently loaded videos" disabled>
+                        <span class="recent-label" id="recentLabel">No recent videos</span>
+                        <span class="recent-caret">▾</span>
+                    </button>
+                    <div class="recent-panel" id="recentPanel" hidden></div>
+                </div>
 
                 <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
                        style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
@@ -76,6 +81,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=6"></script>
+    <script src="/static/js/viewer.js?v=7"></script>
 </body>
 </html>

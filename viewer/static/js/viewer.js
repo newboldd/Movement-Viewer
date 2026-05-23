@@ -139,7 +139,12 @@
                 await _writeAll(arr);
             }
         }
-        return { list, find, touch, updateStereo };
+        async function remove(name, size) {
+            const arr = await _readAll();
+            const next = arr.filter(r => !(r.name === name && r.size === size));
+            if (next.length !== arr.length) await _writeAll(next);
+        }
+        return { list, find, touch, updateStereo, remove };
     })();
 
     // (name, size) of the currently loaded file — used to drive the
@@ -153,28 +158,62 @@
 
     function _recentKey(r) { return `${r.name}|${r.size}`; }
 
+    function _closeRecentPanel() {
+        const panel = $('recentPanel');
+        if (panel) panel.hidden = true;
+    }
+    function _toggleRecentPanel() {
+        const panel = $('recentPanel');
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+    }
+
     async function _refreshRecentDropdown() {
-        const sel = $('recentSelect');
-        if (!sel) return;
+        const toggle = $('recentToggleBtn');
+        const label  = $('recentLabel');
+        const panel  = $('recentPanel');
+        if (!toggle || !label || !panel) return;
         const recs = await RecentVideos.list();
-        sel.innerHTML = '';
+
+        // Toggle label + disabled state
         if (recs.length === 0) {
-            const opt = document.createElement('option');
-            opt.value = ''; opt.textContent = 'No recent videos';
-            sel.appendChild(opt);
-            sel.disabled = true;
+            label.textContent = 'No recent videos';
+            toggle.disabled = true;
+            panel.innerHTML = '';
+            panel.hidden = true;
             return;
         }
-        sel.disabled = false;
+        toggle.disabled = false;
+        const curKey = currentLoaded ? _recentKey(currentLoaded) : null;
+        const cur = curKey ? recs.find(r => _recentKey(r) === curKey) : null;
+        label.textContent = cur ? cur.name : recs[0].name;
+
+        // Rebuild the rows.
+        panel.innerHTML = '';
         for (const r of recs) {
-            const opt = document.createElement('option');
-            opt.value = _recentKey(r);
-            opt.textContent = r.name;
-            sel.appendChild(opt);
-        }
-        if (currentLoaded) {
-            sel.value = _recentKey(currentLoaded);
-            if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+            const row = document.createElement('div');
+            row.className = 'recent-row' + (curKey === _recentKey(r) ? ' current' : '');
+            row.dataset.key = _recentKey(r);
+            row.innerHTML =
+                `<span class="recent-name"></span>` +
+                `<button type="button" class="recent-x" title="Remove from list">×</button>`;
+            row.querySelector('.recent-name').textContent = r.name;
+            row.addEventListener('click', e => {
+                if (e.target.closest('.recent-x')) return;   // X handled separately
+                _closeRecentPanel();
+                _loadFromRecent(row.dataset.key);
+            });
+            row.querySelector('.recent-x').addEventListener('click', async e => {
+                e.stopPropagation();
+                await RecentVideos.remove(r.name, r.size);
+                if (currentLoaded &&
+                    currentLoaded.name === r.name &&
+                    currentLoaded.size === r.size) {
+                    currentLoaded = null;
+                }
+                _refreshRecentDropdown();
+            });
+            panel.appendChild(row);
         }
     }
 
@@ -226,6 +265,8 @@
         'timelineSlider', 'prevFrameBtn', 'playBtn', 'nextFrameBtn',
         'speedSlider', 'sideToggle', 'resetZoomBtn',
         'exportBtn', 'stereoCheckbox',
+        // recentToggleBtn is gated separately by _refreshRecentDropdown
+        // (enabled iff there's at least one recent entry).
     ];
     function _setLoaded(loaded) {
         for (const id of _GATED_IDS) {
@@ -365,11 +406,13 @@
             e.target.value = '';
         });
 
-        // Recent-videos dropdown
-        $('recentSelect').addEventListener('change', e => {
-            const v = e.target.value;
-            e.target.blur();
-            if (v) _loadFromRecent(v);
+        // Recent-videos picker — toggle on click, close on outside click.
+        $('recentToggleBtn').addEventListener('click', e => {
+            e.stopPropagation();
+            _toggleRecentPanel();
+        });
+        document.addEventListener('click', e => {
+            if (!$('recentPicker').contains(e.target)) _closeRecentPanel();
         });
 
         $('stereoCheckbox').addEventListener('change', e => {

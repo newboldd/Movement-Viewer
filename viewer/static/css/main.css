@@ -81,22 +81,72 @@ body { overflow: hidden; }
     border-color: var(--violet-bright);
 }
 
-/* <select> styled to match the .btn chips */
-.recent-select {
+/* Custom recent-videos picker (a button + a floating panel). */
+.recent-picker { position: relative; display: inline-block; }
+.recent-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 220px;
+}
+.recent-toggle .recent-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     max-width: 180px;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, var(--btn-text) 50%),
-                      linear-gradient(135deg, var(--btn-text) 50%, transparent 50%);
-    background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50%;
-    background-size: 5px 5px;
-    background-repeat: no-repeat;
-    padding-right: 22px;
 }
-.recent-select:disabled {
-    background-image: none;
-    padding-right: 10px;
+.recent-caret { opacity: 0.55; font-size: 10px; }
+
+.recent-panel {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    min-width: 240px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 4px 0;
+    background: #ffffff;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    z-index: 50;
 }
+.recent-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--btn-text);
+    font-weight: 600;
+}
+.recent-row:hover { background: var(--bg-hover); }
+.recent-row.current::before {
+    content: '●';
+    color: var(--violet-bright);
+    font-size: 9px;
+    margin-right: 2px;
+}
+.recent-row.current { font-weight: 800; }
+.recent-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.recent-x {
+    border: none;
+    background: transparent;
+    color: var(--btn-text);
+    opacity: 0.45;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 3px;
+}
+.recent-x:hover { opacity: 1; color: #b91c1c; background: rgba(185,28,28,0.08); }
 .btn-primary:hover { background: #c233ef; border-color: #c233ef; }
 
 /* Prev / Play / Next: fixed equal width so the row doesn't jiggle when
