@@ -21,7 +21,7 @@
             <!-- Timeline -->
             <div class="timeline-row">
                 <div class="timeline-wrap" id="timelineWrap">
-                    <input type="range" id="timelineSlider" min="0" max="1000" value="0">
+                    <input type="range" id="timelineSlider" min="0" max="1000" value="0" disabled>
                     <div id="trimUI" style="display:none;">
                         <div id="trimTrack"></div>
                         <input type="range" id="trimStart" class="trim-slider" min="0" max="1000" value="0">
@@ -35,40 +35,42 @@
 
             <!-- Playback -->
             <div class="playback-row">
-                <button class="btn btn-sm" id="prevFrameBtn" title="Prev frame (A/←)">&#8592;</button>
-                <button class="btn btn-sm" id="playBtn"     title="Play/Pause (Space)">&#9654;</button>
-                <button class="btn btn-sm" id="nextFrameBtn" title="Next frame (S/→)">&#8594;</button>
+                <button class="btn btn-sm" id="prevFrameBtn" title="Prev frame (A/←)" disabled>&#8592;</button>
+                <button class="btn btn-sm" id="playBtn"     title="Play/Pause (Space)" disabled>&#9654;</button>
+                <button class="btn btn-sm" id="nextFrameBtn" title="Next frame (S/→)" disabled>&#8594;</button>
 
                 <div class="divider"></div>
 
                 <div class="speed-wrap">
                     <label>Speed</label>
-                    <input type="range" id="speedSlider" min="0" max="13" value="6">
+                    <input type="range" id="speedSlider" min="0" max="13" value="6" disabled>
                     <span id="speedDisplay">1x</span>
                 </div>
 
                 <div class="divider"></div>
 
-                <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)">OS | OD</button>
-                <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)">Reset Zoom</button>
+                <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)" disabled>OS | OD</button>
+                <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)" disabled>Reset Zoom</button>
 
                 <div class="spacer"></div>
 
-                <button class="btn btn-sm" id="browseBtn" title="Open any video file">Browse…</button>
-                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
-                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
-                    <input type="checkbox" id="stereoCheckbox" style="margin:0;"> Stereo
-                </label>
-                <input type="file" id="browseInput" accept="video/*" style="display:none;">
-
-                <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()">Export Video</button>
+                <!-- Order: Export → Stereo → Load Video (Load Video stays last so it's the most reachable). -->
+                <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
                 <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
                 <span id="exportStatus"></span>
+
+                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
+                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
+                </label>
+
+                <button class="btn btn-sm" id="browseBtn" title="Open any video file">Load Video</button>
+                <input type="file" id="browseInput" accept="video/*" style="display:none;">
             </div>
         </div>
 
     </div>
 
-    <script src="/static/js/viewer.js?v=2"></script>
+    <script src="/static/js/viewer.js?v=3"></script>
 </body>
 </html>

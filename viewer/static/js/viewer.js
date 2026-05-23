@@ -49,6 +49,19 @@
     const $ = id => document.getElementById(id);
     function dbg() {}   // no-op placeholder
 
+    // IDs of controls that should only be active once a video is loaded.
+    const _GATED_IDS = [
+        'timelineSlider', 'prevFrameBtn', 'playBtn', 'nextFrameBtn',
+        'speedSlider', 'sideToggle', 'resetZoomBtn',
+        'exportBtn', 'stereoCheckbox',
+    ];
+    function _setLoaded(loaded) {
+        for (const id of _GATED_IDS) {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !loaded;
+        }
+    }
+
     // ── Init ────────────────────────────────────────────────
     function init() {
         canvas = $('canvas');
@@ -98,6 +111,7 @@
             $('timelineSlider').value = 0;
             $('frameDisplay').textContent = 0;
             $('dropHint').classList.add('hidden');
+            _setLoaded(true);
             sizeCanvas();
             // Seek to mid-first-frame (t=0 is often un-decodable).
             videoEl.currentTime = Math.min(0.5 / fps, videoEl.duration);
