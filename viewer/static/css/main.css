@@ -172,8 +172,12 @@ body { overflow: hidden; }
    tabular-nums (above) gives every digit the same advance width, and
    these per-field min-widths cover the longest plausible values
    ("59:59.99" and 5-digit frame indices). */
-#timeDisplay, #totalTimeDisplay { display: inline-block; min-width: 7ch; text-align: right; }
-#frameDisplay, #totalFramesDisplay { display: inline-block; min-width: 5ch; text-align: right; }
+/* Current values right-align (their digits grow toward the "/").
+   Totals left-align (they sit flush against the "/"). */
+#timeDisplay       { display: inline-block; min-width: 7ch; text-align: right; }
+#totalTimeDisplay  { display: inline-block; min-width: 7ch; text-align: left;  }
+#frameDisplay      { display: inline-block; min-width: 5ch; text-align: right; }
+#totalFramesDisplay{ display: inline-block; min-width: 5ch; text-align: left;  }
 
 .timeline-row input[type="range"] {
     flex: 1;

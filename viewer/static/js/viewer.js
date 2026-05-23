@@ -798,6 +798,29 @@
         };
     }
 
+    /** True when the current crop window covers the entire source frame
+     *  (or the entire active half, for stereo) — i.e. the export would
+     *  contain the same pixels as just feeding the source through ffmpeg
+     *  with no crop.  Used to decide whether to add a "_Crop" tag in
+     *  the suggested export filename. */
+    function _cropIsFullSource() {
+        const { bps, baseOX, baseOY, sw } = getBaseMetrics();
+        if (!(bps > 0) || !(vidH > 0) || !(sw > 0)) return true;
+        const denom = bps * scale;
+        if (!(denom > 0)) return true;
+        // Crop expressed in source-image pixels (top-left at 0,0 of
+        // whichever half is currently shown).
+        const ix = (cropX - baseOX - offsetX) / denom;
+        const iy = (cropY - baseOY - offsetY) / denom;
+        const iw = cropW / denom;
+        const ih = cropH / denom;
+        const TOL = 2;     // source-pixel tolerance
+        return Math.abs(ix)        < TOL &&
+               Math.abs(iy)        < TOL &&
+               Math.abs(iw - sw)   < TOL &&
+               Math.abs(ih - vidH) < TOL;
+    }
+
     function _resetCropToView() {
         const r = _visibleVideoRect();
         let w = r.right - r.left;
@@ -1031,14 +1054,15 @@
         const stem = (currentLoaded && currentLoaded.name)
             ? currentLoaded.name.replace(/\.\w+$/, '')
             : 'export';
-        // Include the active camera tag only when stereo is on; always
-        // tag the playback rate (e.g. "_0.5x").
+        // Tags: camera (stereo only), "_Crop" iff the crop is not the
+        // full source half/frame, and "_{rate}x" iff rate ≠ 1.
         const camTag   = isStereo ? `_${currentSide}` : '';
-        const speedTag = `_${playbackRate}x`;
+        const cropTag  = _cropIsFullSource() ? '' : '_Crop';
+        const speedTag = (playbackRate === 1) ? '' : `_${playbackRate}x`;
         let saveHandle = null;
         try {
             saveHandle = await window.showSaveFilePicker({
-                suggestedName: `${stem}${camTag}${speedTag}.mp4`,
+                suggestedName: `${stem}${camTag}${cropTag}${speedTag}.mp4`,
                 types: [{
                     description: 'MP4 video',
                     accept: { 'video/mp4': ['.mp4'] },
