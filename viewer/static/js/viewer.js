@@ -221,9 +221,9 @@
         // run and the label only shows a real title once one is open.
         label.textContent = cur ? cur.name : 'Load Recent';
 
-        // Rebuild the rows.  The currently loaded entry doesn't get a
-        // remove (×) button — protects against deleting the row that
-        // matches the video you're watching.
+        // Rebuild the rows.  Every entry — including the currently
+        // loaded one — gets a remove (×) button.  Removing the current
+        // entry additionally returns the page to its empty state.
         panel.innerHTML = '';
         for (const r of recs) {
             const isCurrent = curKey === _recentKey(r);
@@ -232,21 +232,19 @@
             row.dataset.key = _recentKey(r);
             row.innerHTML =
                 `<span class="recent-name"></span>` +
-                (isCurrent ? '' : `<button type="button" class="recent-x" title="Remove from list">×</button>`);
+                `<button type="button" class="recent-x" title="Remove from list">×</button>`;
             row.querySelector('.recent-name').textContent = r.name;
             row.addEventListener('click', e => {
                 if (e.target.closest('.recent-x')) return;   // X handled separately
                 _closeRecentPanel();
                 _loadFromRecent(row.dataset.key);
             });
-            const xBtn = row.querySelector('.recent-x');
-            if (xBtn) {
-                xBtn.addEventListener('click', async e => {
-                    e.stopPropagation();
-                    await RecentVideos.remove(r.name, r.size);
-                    _refreshRecentDropdown();
-                });
-            }
+            row.querySelector('.recent-x').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (isCurrent) _unloadVideo();
+                await RecentVideos.remove(r.name, r.size);
+                _refreshRecentDropdown();
+            });
             panel.appendChild(row);
         }
     }
@@ -304,6 +302,36 @@
             const el = document.getElementById(id);
             if (el) el.disabled = !loaded;
         }
+    }
+
+    /** Restore the page to its empty / "no video loaded" state. */
+    function _unloadVideo() {
+        if (playing) togglePlay();
+        if (exportMode) exitExportMode();
+        if (videoEl) {
+            try {
+                videoEl.pause();
+                videoEl.removeAttribute('src');
+                videoEl.load();
+            } catch (_) {}
+        }
+        vidW = 0; vidH = 0; midline = 0;
+        isStereo = false;
+        nFrames = 0;
+        fps = 30;
+        currentFrame = 0;
+        scale = 1; offsetX = 0; offsetY = 0;
+        currentLoaded = null;
+        pendingRecent = null;
+        $('frameDisplay').textContent = 0;
+        $('totalFramesDisplay').textContent = 0;
+        $('timelineSlider').value = 0;
+        $('timelineSlider').max = 1000;
+        $('stereoCheckbox').checked = false;
+        _refreshTimeDisplay();
+        _setLoaded(false);
+        updateCameraButton();
+        render();
     }
 
     // ── Init ────────────────────────────────────────────────
