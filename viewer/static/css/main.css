@@ -2,8 +2,8 @@
 :root {
     --bg:           #57068c;     /* NYU Langone primary purple — main background */
     --bg-card:      #3d0560;     /* deeper purple for the control bar */
-    --bg-button:    #6a1aa3;     /* slightly lighter than --bg for default buttons */
-    --bg-hover:     #8536c2;
+    --bg-button:    #2a0444;     /* darker than --bg for default buttons */
+    --bg-hover:     #3d0560;
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
