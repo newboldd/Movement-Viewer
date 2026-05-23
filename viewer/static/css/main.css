@@ -2,8 +2,8 @@
 :root {
     --bg:           #4d2680;     /* muted royal purple — main background */
     --bg-card:      #3a1c63;     /* slightly deeper purple for the control bar */
-    --bg-button:    #ffffff;     /* white buttons */
-    --bg-hover:     #efe7f5;     /* very light purple tint on hover */
+    --bg-button:    #efe7f5;     /* light purple tint at rest */
+    --bg-hover:     #ffffff;     /* white on hover */
     --btn-text:     #2d0f5a;     /* dark purple text for buttons */
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
@@ -83,12 +83,15 @@ body { overflow: hidden; }
 .btn-primary:hover { background: #c233ef; border-color: #c233ef; }
 
 /* Prev / Play / Next: fixed equal width so the row doesn't jiggle when
-   the play button glyph changes. */
+   the play button glyph changes.  Glyphs sized bigger than the rest of
+   the button text so they fill the button. */
 #prevFrameBtn, #playBtn, #nextFrameBtn {
-    min-width: 38px;
+    min-width: 44px;
     text-align: center;
     padding-left: 0;
     padding-right: 0;
+    font-size: 18px;
+    line-height: 1;
 }
 
 /* Timeline row */
