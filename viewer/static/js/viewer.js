@@ -144,12 +144,17 @@
                 videoEl.playbackRate = Math.max(0.0625, Math.min(playbackRate, 16));
             }
         });
+        // Blur on release so subsequent space-bar presses hit Play/Pause
+        // (keyboard listener skips events whose target is an INPUT).
+        speedSlider.addEventListener('change', () => speedSlider.blur());
 
         // Timeline scrub
-        $('timelineSlider').addEventListener('input', () => {
+        const timeline = $('timelineSlider');
+        timeline.addEventListener('input', () => {
             if (!nFrames) return;
-            goToFrame(parseInt($('timelineSlider').value));
+            goToFrame(parseInt(timeline.value));
         });
+        timeline.addEventListener('change', () => timeline.blur());
 
         // Keyboard shortcuts
         document.addEventListener('keydown', e => {
@@ -611,6 +616,9 @@
         };
         tStart.addEventListener('input', onInput);
         tEnd.addEventListener('input', onInput);
+        // Blur after release so space-bar reaches the play/pause shortcut.
+        tStart.addEventListener('change', () => tStart.blur());
+        tEnd.addEventListener('change',   () => tEnd.blur());
     }
 
     function seekAndRenderFrame(f) {
