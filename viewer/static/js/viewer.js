@@ -1123,6 +1123,7 @@
             await writable.write(mp4Blob);
             await writable.close();
             status.textContent = `Saved to ${saveHandle.name}.`;
+            saveHandle = null;          // committed → don't delete on cleanup
             exportId = null;
         } catch (err) {
             if (err && err.name === 'AbortError') {
@@ -1134,6 +1135,13 @@
                 console.error(err);
                 status.textContent = 'Error: ' + err.message;
             }
+            // Either way, an incomplete (possibly zero-byte) file may
+            // exist at the chosen path because showSaveFilePicker
+            // creates it on dialog confirmation.  Best-effort remove.
+            if (saveHandle && typeof saveHandle.remove === 'function') {
+                try { await saveHandle.remove(); } catch (_) {}
+            }
+            saveHandle = null;
         } finally {
             exportRunning = false;
             exportAbort = null;
