@@ -1032,10 +1032,14 @@
         const stem = (currentLoaded && currentLoaded.name)
             ? currentLoaded.name.replace(/\.\w+$/, '')
             : 'export';
+        // Include the active camera tag only when stereo is on; always
+        // tag the playback rate (e.g. "_0.5x").
+        const camTag   = isStereo ? `_${currentSide}` : '';
+        const speedTag = `_${playbackRate}x`;
         let saveHandle = null;
         try {
             saveHandle = await window.showSaveFilePicker({
-                suggestedName: `${stem}_clip.mp4`,
+                suggestedName: `${stem}${camTag}${speedTag}.mp4`,
                 types: [{
                     description: 'MP4 video',
                     accept: { 'video/mp4': ['.mp4'] },
