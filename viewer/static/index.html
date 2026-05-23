@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movement Viewer</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=6">
+    <link rel="stylesheet" href="/static/css/main.css?v=7">
 </head>
 <body>
     <div class="viewer-outer">
@@ -29,6 +29,9 @@
                     </div>
                 </div>
                 <span class="frame-counter">
+                    <strong id="timeDisplay">0:00.000</strong>
+                    / <strong id="totalTimeDisplay">0:00.000</strong>
+                    <span class="counter-sep">&middot;</span>
                     Frame <strong id="frameDisplay">0</strong> / <strong id="totalFramesDisplay">0</strong>
                 </span>
             </div>
@@ -80,6 +83,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=12"></script>
+    <script src="/static/js/viewer.js?v=13"></script>
 </body>
 </html>

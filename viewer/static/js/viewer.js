@@ -49,6 +49,23 @@
     const $ = id => document.getElementById(id);
     function dbg() {}   // no-op placeholder
 
+    /** Format a frame index as "M:SS.mmm" using the current fps. */
+    function _fmtTime(frameIdx) {
+        if (!fps || !isFinite(frameIdx)) return '0:00.000';
+        const sec = frameIdx / fps;
+        const m = Math.floor(sec / 60);
+        const rem = sec - m * 60;
+        const s = Math.floor(rem);
+        const ms = Math.round((rem - s) * 1000);
+        return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    }
+    function _refreshTimeDisplay() {
+        const td  = $('timeDisplay');
+        const ttd = $('totalTimeDisplay');
+        if (td)  td.textContent  = _fmtTime(currentFrame);
+        if (ttd) ttd.textContent = _fmtTime(Math.max(0, nFrames - 1));
+    }
+
     // ── Recent-videos store (IndexedDB) ────────────────────────
     // Each record: { name, size, stereo, lastUsed, handle? }.  The
     // optional `handle` is a FileSystemFileHandle (Chrome/Edge) that
@@ -349,6 +366,7 @@
             $('timelineSlider').max = nFrames - 1;
             $('timelineSlider').value = 0;
             $('frameDisplay').textContent = 0;
+            _refreshTimeDisplay();
             $('dropHint').classList.add('hidden');
             _setLoaded(true);
             sizeCanvas();
@@ -515,6 +533,7 @@
         if (!nFrames) return;
         currentFrame = Math.max(0, Math.min(n, nFrames - 1));
         $('frameDisplay').textContent = currentFrame;
+        _refreshTimeDisplay();
         $('timelineSlider').value = currentFrame;
         if (videoEl.readyState >= 2 && fps) {
             videoEl.currentTime = (currentFrame + 0.5) / fps;
@@ -554,6 +573,7 @@
             if (f !== currentFrame && f >= 0 && f < nFrames) {
                 currentFrame = f;
                 $('frameDisplay').textContent = currentFrame;
+                _refreshTimeDisplay();
                 $('timelineSlider').value = currentFrame;
                 render();
             }
@@ -977,6 +997,7 @@
         return new Promise(resolve => {
             currentFrame = Math.max(0, Math.min(f, nFrames - 1));
             $('frameDisplay').textContent = currentFrame;
+            _refreshTimeDisplay();
             if (videoEl.readyState >= 2 && fps) {
                 videoEl.currentTime = (currentFrame + 0.5) / fps;
                 videoEl.addEventListener('seeked', () => { render(); resolve(); }, { once: true });
@@ -994,6 +1015,31 @@
         const endFrame   = Math.max(tA, tB);
         if (endFrame <= startFrame) { alert('Trim range is empty'); return; }
         const totalFrames = endFrame - startFrame + 1;
+
+        // Prompt for the save destination FIRST — while the user
+        // activation from the Export click is still valid.  If the
+        // user cancels we never touch the server.
+        if (!window.showSaveFilePicker) {
+            alert('Saving the export needs Chrome or Edge (File System Access API).');
+            return;
+        }
+        const stem = (currentLoaded && currentLoaded.name)
+            ? currentLoaded.name.replace(/\.\w+$/, '')
+            : 'export';
+        let saveHandle = null;
+        try {
+            saveHandle = await window.showSaveFilePicker({
+                suggestedName: `${stem}_clip.mp4`,
+                types: [{
+                    description: 'MP4 video',
+                    accept: { 'video/mp4': ['.mp4'] },
+                }],
+            });
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;     // user cancelled
+            alert('Could not open save dialog: ' + err.message);
+            return;
+        }
 
         const status = $('exportStatus');
         const btn = $('exportBtn');
@@ -1069,13 +1115,14 @@
             });
             if (!encResp.ok) throw new Error('encoding failed');
             const mp4Blob = await encResp.blob();
-            const url = URL.createObjectURL(mp4Blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'export.mp4';
-            a.textContent = 'Download MP4';
-            status.textContent = 'Done.';
-            status.appendChild(a);
+            // Write straight to the file the user picked — no blob URL,
+            // no download link, no in-memory copy past this point.
+            status.textContent = 'Saving…';
+            _checkAbort();
+            const writable = await saveHandle.createWritable();
+            await writable.write(mp4Blob);
+            await writable.close();
+            status.textContent = `Saved to ${saveHandle.name}.`;
             exportId = null;
         } catch (err) {
             if (err && err.name === 'AbortError') {

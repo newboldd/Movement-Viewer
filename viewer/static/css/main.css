@@ -172,10 +172,11 @@ body { overflow: hidden; }
     font-size: 11px;
     color: var(--text-muted);
     white-space: nowrap;
-    min-width: 90px;
     text-align: right;
+    font-variant-numeric: tabular-nums;
 }
-.frame-counter strong { color: var(--text); }
+.frame-counter strong { color: var(--text); font-weight: 700; }
+.frame-counter .counter-sep { margin: 0 6px; opacity: 0.45; }
 
 .timeline-row input[type="range"] {
     flex: 1;
