@@ -60,6 +60,12 @@
 
                 <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
                 <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
+                <label id="speedBadgeLabel"
+                       title="Burn a large speed badge into the top-left of the exported video"
+                       style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="speedBadgeCheckbox" style="margin:0;">
+                    Show <span id="speedBadgeLabelText">1x</span>
+                </label>
                 <span id="exportStatus"></span>
 
                 <div class="spacer"></div>
@@ -80,6 +86,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=27"></script>
+    <script src="/static/js/viewer.js?v=28"></script>
 </body>
 </html>

@@ -45,6 +45,7 @@
     let exportRunning = false;
     let exportAbort = null;
     let exportAbortRequested = false;
+    let showSpeedBadge = false;     // "Show #x" checkbox state
     let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
     let cropDragMode = null;
     let cropDragStart = null;
@@ -482,6 +483,14 @@
             e.target.value = '';
         });
 
+        // "Show #x" checkbox — burns a large speed badge into the
+        // cropped frame (visible in the live view and the export).
+        $('speedBadgeCheckbox').addEventListener('change', e => {
+            showSpeedBadge = !!e.target.checked;
+            render();
+            e.target.blur();
+        });
+
         // Recent-videos picker — toggle on click, close on outside click.
         $('recentToggleBtn').addEventListener('click', e => {
             e.stopPropagation();
@@ -516,6 +525,9 @@
         speedSlider.addEventListener('input', () => {
             playbackRate = SPEED_PRESETS[parseInt(speedSlider.value)];
             $('speedDisplay').textContent = playbackRate + 'x';
+            // Refresh the export-mode speed-badge UI if it's visible.
+            _updateSpeedBadgeUI();
+            if (exportMode) render();
             if (!playing) return;
             // Cancel whichever play mode is currently running, then
             // re-enter the one that matches the new rate.  Without this
@@ -960,6 +972,38 @@
         }
     }
 
+    /** Draw the optional speed badge — a large, dark-purple "#x" tag
+     *  with a white background — anchored at the top-left of the crop
+     *  rectangle.  Drawn from render() before the orange crop overlay
+     *  so it ends up inside the captured frame during export. */
+    function _drawSpeedBadge() {
+        if (!showSpeedBadge || !exportMode) return;
+        if (playbackRate === 1) return;
+        if (!(cropW > 0) || !(cropH > 0)) return;
+
+        const text = `${playbackRate}x`;
+        const fontSize = Math.max(28, Math.min(96, Math.round(cropH * 0.10)));
+        ctx.save();
+        ctx.font = `800 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        const padX = Math.round(fontSize * 0.35);
+        const padY = Math.round(fontSize * 0.18);
+        const tw = ctx.measureText(text).width;
+        const bw = tw + padX * 2;
+        const bh = fontSize + padY * 2;
+        const margin = Math.max(8, Math.round(fontSize * 0.25));
+        const x = cropX + margin;
+        const y = cropY + margin;
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x, y, bw, bh);
+        // Dark-purple text (matches --btn-text)
+        ctx.fillStyle = '#2d0f5a';
+        ctx.fillText(text, x + padX, y + padY);
+        ctx.restore();
+    }
+
     function _drawCropOverlay() {
         if (!exportMode || exportRunning) return;
         if (!(cropW > 0) || !(cropH > 0)) return;
@@ -1003,7 +1047,8 @@
         ctx.scale(scale, scale);
         ctx.drawImage(videoEl, sx, 0, sw, vidH, 0, 0, sw * bps, vidH * bps);
         ctx.restore();
-        _drawCropOverlay();
+        _drawSpeedBadge();          // baked into the captured frames
+        _drawCropOverlay();         // visible only when not capturing
     }
 
     // ── Export mode ──────────────────────────────────────────
@@ -1026,6 +1071,23 @@
                 ${GREY} ${bP}%, ${GREY} 100%)`;
     }
 
+    /** Show/hide the "Show #x" checkbox and refresh its label. */
+    function _updateSpeedBadgeUI() {
+        const label = $('speedBadgeLabel');
+        const cb    = $('speedBadgeCheckbox');
+        const txt   = $('speedBadgeLabelText');
+        if (!label || !cb || !txt) return;
+        const show = exportMode && playbackRate !== 1;
+        label.style.display = show ? 'inline-flex' : 'none';
+        if (show) {
+            txt.textContent = `${playbackRate}x`;
+        } else {
+            // Hidden checkbox shouldn't leak a stale badge into the view.
+            cb.checked = false;
+            showSpeedBadge = false;
+        }
+    }
+
     function enterExportMode() {
         if (!nFrames) { alert('Open a video first'); return; }
         if (playing) togglePlay();
@@ -1046,6 +1108,7 @@
         btn.classList.add('btn-primary');
         $('exportCancelBtn').style.display = '';
         $('exportStatus').textContent = '';
+        _updateSpeedBadgeUI();
         _resetCropToView();
         render();
     }
@@ -1061,6 +1124,7 @@
         btn.disabled = false;
         $('exportCancelBtn').style.display = 'none';
         $('exportStatus').textContent = '';
+        _updateSpeedBadgeUI();          // hides the label, clears the flag
         cropDragMode = null;
         cropDragStart = null;
         canvas.style.cursor = '';
