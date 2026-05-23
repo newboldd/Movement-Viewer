@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movement Viewer</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=3">
+    <link rel="stylesheet" href="/static/css/main.css?v=4">
 </head>
 <body>
     <div class="viewer-outer">
@@ -59,6 +59,11 @@
                 <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
                 <span id="exportStatus"></span>
 
+                <select class="btn btn-sm recent-select" id="recentSelect"
+                        title="Recently loaded videos" disabled>
+                    <option value="">No recent videos</option>
+                </select>
+
                 <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
                        style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
                     <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
@@ -71,6 +76,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=3"></script>
+    <script src="/static/js/viewer.js?v=4"></script>
 </body>
 </html>

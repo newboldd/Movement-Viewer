@@ -49,6 +49,155 @@
     const $ = id => document.getElementById(id);
     function dbg() {}   // no-op placeholder
 
+    // ── Recent-videos store (IndexedDB) ──────────────────────
+    // Persists up to MAX recently loaded video Blobs across page reloads.
+    // Records: { id (auto), name, size, blob, lastUsed }.  The same
+    // (name, size) replaces the prior entry rather than duplicating.
+    const RecentVideos = (() => {
+        const DB_NAME = 'movement_viewer';
+        const STORE   = 'recent_videos';
+        const MAX     = 10;
+        let _db = null;
+
+        function _open() {
+            return new Promise((resolve, reject) => {
+                if (_db) return resolve(_db);
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE)) {
+                        db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+                    }
+                };
+                req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+                req.onerror   = e => reject(e.target.error);
+            });
+        }
+
+        async function list() {
+            const db = await _open();
+            return new Promise((resolve, reject) => {
+                const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+                req.onsuccess = () => {
+                    const all = (req.result || []).slice();
+                    all.sort((a, b) => b.lastUsed - a.lastUsed);
+                    resolve(all);
+                };
+                req.onerror = e => reject(e.target.error);
+            });
+        }
+
+        async function add(file) {
+            try {
+                const db = await _open();
+                const existing = await list();
+                const dup = existing.find(r => r.name === file.name && r.size === file.size);
+                const now = Date.now();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE, 'readwrite');
+                    const store = tx.objectStore(STORE);
+                    const rec = { name: file.name, size: file.size, blob: file, lastUsed: now };
+                    if (dup) { rec.id = dup.id; store.put(rec); }
+                    else                       { store.add(rec); }
+                    tx.oncomplete = resolve;
+                    tx.onerror = e => reject(e.target.error);
+                });
+                // Trim to MAX
+                const all = await list();
+                if (all.length > MAX) {
+                    const toDelete = all.slice(MAX);
+                    const tx2 = db.transaction(STORE, 'readwrite');
+                    const s2 = tx2.objectStore(STORE);
+                    for (const r of toDelete) s2.delete(r.id);
+                    await new Promise((res, rej) => {
+                        tx2.oncomplete = res;
+                        tx2.onerror = e => rej(e.target.error);
+                    });
+                }
+            } catch (err) {
+                // Quota or corruption — log and ignore; the user can still
+                // re-pick the file via Load Video.
+                console.warn('RecentVideos.add failed:', err);
+            }
+        }
+
+        async function get(id) {
+            const db = await _open();
+            return new Promise((resolve, reject) => {
+                const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
+                req.onsuccess = () => {
+                    if (!req.result) return resolve(null);
+                    const rec = req.result;
+                    // Reconstruct a File so the rest of the loadFile path
+                    // (which expects a File-like .name) stays unchanged.
+                    let f;
+                    try {
+                        f = new File([rec.blob], rec.name, { type: rec.blob.type });
+                    } catch (_) {
+                        f = rec.blob;   // very old browsers — Blob is enough
+                        f.name = rec.name;
+                    }
+                    // Touch lastUsed (best-effort; ignore failure).
+                    try {
+                        const tx = db.transaction(STORE, 'readwrite');
+                        tx.objectStore(STORE).put({ ...rec, lastUsed: Date.now() });
+                    } catch (_) {}
+                    resolve(f);
+                };
+                req.onerror = e => reject(e.target.error);
+            });
+        }
+
+        return { list, add, get };
+    })();
+
+    // Track the IndexedDB id of the currently loaded video (so the
+    // dropdown stays in sync when a file is loaded via Load Video).
+    let currentRecentId = null;
+
+    async function _refreshRecentDropdown() {
+        const sel = $('recentSelect');
+        if (!sel) return;
+        let recs = [];
+        try { recs = await RecentVideos.list(); } catch (_) {}
+        sel.innerHTML = '';
+        if (recs.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = ''; opt.textContent = 'No recent videos';
+            sel.appendChild(opt);
+            sel.disabled = true;
+            return;
+        }
+        sel.disabled = false;
+        for (const r of recs) {
+            const opt = document.createElement('option');
+            opt.value = String(r.id);
+            opt.textContent = r.name;
+            sel.appendChild(opt);
+        }
+        // If we know the currently loaded id, select it; otherwise the
+        // most-recent entry (index 0) is selected by default.
+        if (currentRecentId != null) {
+            sel.value = String(currentRecentId);
+            // If that record was trimmed off the end of the list, fall
+            // back to the top.
+            if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+        }
+    }
+
+    async function _loadFromRecent(idStr) {
+        if (!idStr) return;
+        const id = parseInt(idStr);
+        let file = null;
+        try { file = await RecentVideos.get(id); } catch (_) {}
+        if (!file) {
+            alert('Could not load that video (storage may have been cleared).');
+            return;
+        }
+        currentRecentId = id;
+        loadFile(file, /* alreadyRecent */ true);
+    }
+
     // IDs of controls that should only be active once a video is loaded.
     const _GATED_IDS = [
         'timelineSlider', 'prevFrameBtn', 'playBtn', 'nextFrameBtn',
@@ -73,10 +222,11 @@
         _wireTrimHandles();
         sizeCanvas();
         render();
+        _refreshRecentDropdown();
     }
 
     // ── File loading ─────────────────────────────────────────
-    function loadFile(file) {
+    function loadFile(file, alreadyRecent) {
         if (!file) return;
         // Reset state
         currentFrame = 0;
@@ -113,6 +263,21 @@
             $('dropHint').classList.add('hidden');
             _setLoaded(true);
             sizeCanvas();
+            // Add to the recent-videos store (no-op when the file is a
+            // round-trip from IDB and was just bumped by RecentVideos.get).
+            if (!alreadyRecent) {
+                RecentVideos.add(file).then(async () => {
+                    // The newly added record is the most recent → top of
+                    // the list.  Read it back to pick up its assigned id.
+                    try {
+                        const recs = await RecentVideos.list();
+                        if (recs.length > 0) currentRecentId = recs[0].id;
+                    } catch (_) {}
+                    _refreshRecentDropdown();
+                });
+            } else {
+                _refreshRecentDropdown();
+            }
             // Seek to mid-first-frame (t=0 is often un-decodable).
             videoEl.currentTime = Math.min(0.5 / fps, videoEl.duration);
             videoEl.addEventListener('seeked', render, { once: true });
@@ -130,8 +295,18 @@
         $('browseBtn').addEventListener('click', () => $('browseInput').click());
         $('browseInput').addEventListener('change', e => {
             const file = e.target.files[0];
-            if (file) loadFile(file);
+            if (file) {
+                currentRecentId = null;   // will be set after RecentVideos.add
+                loadFile(file);
+            }
             e.target.value = '';
+        });
+
+        // Recent-videos dropdown
+        $('recentSelect').addEventListener('change', e => {
+            const v = e.target.value;
+            e.target.blur();
+            if (v) _loadFromRecent(v);
         });
 
         $('stereoCheckbox').addEventListener('change', e => {
