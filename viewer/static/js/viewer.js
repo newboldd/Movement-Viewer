@@ -25,6 +25,12 @@
     const cameraNames = ['OS', 'OD'];
     let currentSide = 'OS';
     let currentCameraIdx = 0;
+    // Empirically-derived alignment pan (OS→OD), in source-image pixels.
+    // Median across 91 stereo trials in the movement-tracker dataset of
+    // (OD MediaPipe-hand-center − OS MediaPipe-hand-center).  Adding the
+    // negation of this delta to offsetX/offsetY on switch makes the same
+    // hand land at roughly the same canvas position in both views.
+    const MP_SWITCH_PAN = { dx: 109, dy: 18 };
 
     let canvas, ctx;
 
@@ -575,9 +581,20 @@
 
     function switchCamera() {
         if (!isStereo) return;
+        const prevWasOS = (currentSide === cameraNames[0]);
         currentCameraIdx = (currentCameraIdx + 1) % 2;
         currentSide = cameraNames[currentCameraIdx];
         updateCameraButton();
+        // Apply the empirical OS↔OD pan so the same hand stays at
+        // roughly the same canvas position.  Sign is + on OS→OD, − on
+        // OD→OS.  Image-pixel offsets are scaled by bps × scale to
+        // become canvas-pixel offsets.
+        const { bps } = getBaseMetrics();
+        if (bps > 0) {
+            const sign = prevWasOS ? +1 : -1;
+            offsetX += sign * MP_SWITCH_PAN.dx * bps * scale;
+            offsetY += sign * MP_SWITCH_PAN.dy * bps * scale;
+        }
         render();
     }
 
