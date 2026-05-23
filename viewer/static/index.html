@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movement Viewer</title>
+    <link rel="stylesheet" href="/static/css/main.css?v=1">
+</head>
+<body>
+    <div class="viewer-outer">
+
+        <!-- Video canvas (no top nav bar — controls live at the bottom). -->
+        <div class="viewer-viewport">
+            <canvas id="canvas"></canvas>
+            <div id="dropHint" class="drop-hint">Click <b>Browse…</b> below to open a video</div>
+        </div>
+
+        <!-- Bottom controls -->
+        <div class="viewer-controls">
+
+            <!-- Timeline -->
+            <div class="timeline-row">
+                <div class="timeline-wrap" id="timelineWrap">
+                    <input type="range" id="timelineSlider" min="0" max="1000" value="0">
+                    <div id="trimUI" style="display:none;">
+                        <div id="trimTrack"></div>
+                        <input type="range" id="trimStart" class="trim-slider" min="0" max="1000" value="0">
+                        <input type="range" id="trimEnd"   class="trim-slider" min="0" max="1000" value="1000">
+                    </div>
+                </div>
+                <span class="frame-counter">
+                    Frame <strong id="frameDisplay">0</strong> / <strong id="totalFramesDisplay">0</strong>
+                </span>
+            </div>
+
+            <!-- Playback -->
+            <div class="playback-row">
+                <button class="btn btn-sm" id="prevFrameBtn" title="Prev frame (A/←)">&#8592;</button>
+                <button class="btn btn-sm" id="playBtn"     title="Play/Pause (Space)">&#9654;</button>
+                <button class="btn btn-sm" id="nextFrameBtn" title="Next frame (S/→)">&#8594;</button>
+
+                <div class="divider"></div>
+
+                <div class="speed-wrap">
+                    <label>Speed</label>
+                    <input type="range" id="speedSlider" min="0" max="13" value="6">
+                    <span id="speedDisplay">1x</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)">OS | OD</button>
+                <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)">Reset Zoom</button>
+
+                <div class="spacer"></div>
+
+                <button class="btn btn-sm" id="browseBtn" title="Open any video file">Browse…</button>
+                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
+                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="stereoCheckbox" style="margin:0;"> Stereo
+                </label>
+                <input type="file" id="browseInput" accept="video/*" style="display:none;">
+
+                <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()">Export Video</button>
+                <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
+                <span id="exportStatus"></span>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/static/js/viewer.js?v=1"></script>
+</body>
+</html>

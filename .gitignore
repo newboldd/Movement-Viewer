@@ -1,0 +1,8 @@
+.venv/
+.python/
+__pycache__/
+*.pyc
+.DS_Store
+wheels/
+*.egg-info/
+.installed
