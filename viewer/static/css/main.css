@@ -276,7 +276,8 @@ body.export-mode #exportBtn {
    green — the inactive half goes flat grey, making it clear that the
    inactive camera will NOT be in the exported video. */
 body.export-mode #sideToggle {
-    border-color: var(--lime);
+    /* No green border — the only green should be the fill on the
+       active half (set below).  Border stays default. */
     padding-left: 0;
     padding-right: 0;
 }
