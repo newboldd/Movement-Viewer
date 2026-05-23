@@ -513,9 +513,12 @@
         const act = 'color:var(--btn-text);font-weight:700;';
         const ina = 'color:var(--violet-bright);font-weight:500;';
         btn.innerHTML = opts.map((name, i) => {
-            const span = `<span style="${name === currentSide ? act : ina}">${name}</span>`;
+            const isActive = (name === currentSide);
+            const cls = 'cam-half ' + (isActive ? 'active' : 'inactive');
+            const inline = isActive ? act : ina;
+            const span = `<span class="${cls}" style="${inline}">${name}</span>`;
             const sep = (i < opts.length - 1)
-                ? `<span style="opacity:0.35;margin:0 3px;">|</span>` : '';
+                ? `<span class="cam-sep">|</span>` : '';
             return span + sep;
         }).join('');
     }

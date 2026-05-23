@@ -269,17 +269,27 @@ body.export-mode #exportBtn {
     color: #fff;
     border-color: var(--violet-bright);
 }
-/* In export mode the OS|OD chip turns green (background) so its role
-   in the export pipeline is obvious.  The span text colors (active =
-   dark purple, inactive = lighter purple, set inline by JS) stay as-is
-   and remain legible on the green chip. */
+/* In export mode only the *active* half of the OS|OD chip turns
+   green — the inactive half goes flat grey, making it clear that the
+   inactive camera will NOT be in the exported video. */
 body.export-mode #sideToggle {
-    background: var(--lime);
     border-color: var(--lime);
+    padding-left: 0;
+    padding-right: 0;
 }
-body.export-mode #sideToggle:hover {
-    background: #7dff7d;
-    border-color: #7dff7d;
+body.export-mode #sideToggle .cam-half.active {
+    background: var(--lime);
+    color: var(--btn-text) !important;
+    padding: 3px 9px;
+    border-radius: 3px;
+}
+body.export-mode #sideToggle .cam-half.inactive {
+    color: #8a8a8a !important;     /* muted grey — won't be exported */
+    padding: 3px 4px;
+}
+body.export-mode #sideToggle .cam-sep {
+    margin: 0;
+    opacity: 0.35;
 }
 
 #exportStatus {
