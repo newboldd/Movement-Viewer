@@ -1,19 +1,25 @@
-/* Movement Viewer — minimal styles (no nav, no sidebar). */
+/* Movement Viewer — NYU Langone palette (white bg, purple primary). */
 :root {
-    --bg: #0b1220;
-    --bg-card: #141c2e;
-    --border: #2a3550;
-    --text: #e7eaf0;
-    --text-muted: #8a92a6;
-    --blue: #3b82f6;
-    --green: #22c55e;
-    --orange: #FF9800;
-    --radius: 4px;
+    --bg:           #ffffff;
+    --bg-card:      #f4f0f8;     /* very light purple tint for the control bar */
+    --bg-hover:     #ece5f2;
+    --text:         #1a1a1a;
+    --text-muted:   #5a5a5a;
+    --border:       #d5cfdf;
+    --purple:       #57068c;     /* NYU Langone primary purple */
+    --purple-bright:#b100e8;     /* accent / highlight */
+    --lime:         #84cc16;     /* trim + crop overlay accent */
+    --lime-dark:    #4d7c0f;     /* outline / hover */
+    --radius:       4px;
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
-              font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
 body { overflow: hidden; }
 
 .viewer-outer {
@@ -27,7 +33,7 @@ body { overflow: hidden; }
     flex: 1;
     position: relative;
     min-height: 0;
-    background: #111;
+    background: #111;            /* video area stays dark for contrast */
     overflow: hidden;
 }
 .viewer-viewport canvas { display: block; width: 100%; height: 100%; }
@@ -35,7 +41,7 @@ body { overflow: hidden; }
 .drop-hint {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    color: var(--text-muted);
+    color: rgba(255,255,255,0.65);
     font-size: 14px;
     pointer-events: none;
 }
@@ -54,17 +60,32 @@ body { overflow: hidden; }
     padding: 4px 10px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: var(--bg);
+    background: #fff;
     color: var(--text);
     font: inherit;
     font-size: 12px;
     cursor: pointer;
     user-select: none;
+    transition: border-color 0.15s, background 0.15s;
 }
-.btn:hover { border-color: #4a5570; }
+.btn:hover { border-color: var(--purple); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.btn-sm { padding: 3px 9px; font-size: 12px; }
-.btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-primary {
+    background: var(--purple);
+    color: #fff;
+    border-color: var(--purple);
+}
+.btn-primary:hover { background: var(--purple-bright); border-color: var(--purple-bright); }
+
+/* Prev / Play / Next: fixed equal width so the row doesn't jiggle when
+   the play button glyph changes. */
+#prevFrameBtn, #playBtn, #nextFrameBtn {
+    min-width: 38px;
+    text-align: center;
+    padding-left: 0;
+    padding-right: 0;
+}
 
 /* Timeline row */
 .timeline-row {
@@ -86,7 +107,7 @@ body { overflow: hidden; }
     flex: 1;
     cursor: pointer;
     height: 4px;
-    accent-color: var(--blue);
+    accent-color: var(--purple);
 }
 
 /* Playback row */
@@ -102,19 +123,16 @@ body { overflow: hidden; }
     background: var(--border);
     margin: 0 4px;
 }
-/* Prev / Play / Next: fixed equal width so the row doesn't jiggle when
-   the play button glyph (▶ vs. ⏸) changes. */
-#prevFrameBtn, #playBtn, #nextFrameBtn {
-    min-width: 38px;
-    text-align: center;
-    padding-left: 0;
-    padding-right: 0;
-}
 
 .speed-wrap { display: flex; align-items: center; gap: 6px; }
 .speed-wrap label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--blue); }
-#speedDisplay { font-size: 11px; color: var(--blue); font-weight: 600; min-width: 28px; }
+.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--purple); }
+#speedDisplay {
+    font-size: 11px;
+    color: var(--purple);
+    font-weight: 600;
+    min-width: 28px;
+}
 .spacer { flex: 1; }
 
 /* Trim sliders (export mode) */
@@ -129,7 +147,7 @@ body { overflow: hidden; }
     position: absolute; left: 0; right: 0;
     top: 50%; transform: translateY(-50%);
     height: 6px; border-radius: 3px;
-    background: var(--blue);
+    background: var(--purple);
     pointer-events: none;
 }
 .trim-slider {
@@ -147,27 +165,31 @@ body { overflow: hidden; }
     -webkit-appearance: none;
     pointer-events: auto;
     width: 14px; height: 20px;
-    background: var(--orange);
-    border: 1px solid #a35f00;
+    background: var(--lime);
+    border: 1px solid var(--lime-dark);
     border-radius: 3px;
     cursor: ew-resize;
 }
 .trim-slider::-moz-range-thumb {
     pointer-events: auto;
     width: 14px; height: 20px;
-    background: var(--orange);
-    border: 1px solid #a35f00;
+    background: var(--lime);
+    border: 1px solid var(--lime-dark);
     border-radius: 3px;
     cursor: ew-resize;
 }
 
 /* Export-mode tints */
-body.export-mode #speedSlider { accent-color: var(--orange); }
+body.export-mode #speedSlider { accent-color: var(--lime); }
 body.export-mode #speedDisplay,
-body.export-mode .speed-wrap label { color: var(--orange); }
-body.export-mode #exportBtn { background: var(--blue); color: #fff; border-color: var(--blue); }
-body.export-mode #sideToggle { border-color: var(--orange); }
-body.export-mode #sideToggle span { color: var(--orange) !important; }
+body.export-mode .speed-wrap label { color: var(--lime-dark); }
+body.export-mode #exportBtn {
+    background: var(--purple);
+    color: #fff;
+    border-color: var(--purple);
+}
+body.export-mode #sideToggle { border-color: var(--lime); }
+body.export-mode #sideToggle span { color: var(--lime-dark) !important; }
 
 #exportStatus {
     font-size: 11px;
@@ -175,4 +197,4 @@ body.export-mode #sideToggle span { color: var(--orange) !important; }
     margin-left: 8px;
     white-space: nowrap;
 }
-#exportStatus a { color: var(--blue); margin-left: 6px; }
+#exportStatus a { color: var(--purple); margin-left: 6px; }
