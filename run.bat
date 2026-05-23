@@ -88,13 +88,55 @@ if exist "!PORTABLE_DIR_LOCAL!\python.exe" (
     )
 )
 
+:: 0) If the user pre-placed a python-embed.zip next to run.bat
+::    (downloaded on another machine), use that and skip the network.
+if exist "%~dp0python-embed.zip" (
+    echo Using pre-downloaded python-embed.zip from the script folder.
+    copy /y "%~dp0python-embed.zip" "!PY_ZIP!" >nul
+    goto :py_zip_ready
+)
+
 echo Downloading portable Python 3.11...
-powershell -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '!PY_ZIP!' }" 2>nul
+set "PY_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+
+:: 1) curl (built into Windows 10/11; honors corporate proxies; shows progress)
+where curl >nul 2>nul
+if not errorlevel 1 (
+    echo   trying curl...
+    curl -L --connect-timeout 15 --retry 2 -o "!PY_ZIP!" "!PY_URL!"
+    if exist "!PY_ZIP!" goto :py_zip_ready
+)
+
+:: 2) PowerShell with progress bar disabled (much faster, doesn't appear hung)
+echo   trying PowerShell...
+powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { Invoke-WebRequest -UseBasicParsing -Uri '!PY_URL!' -OutFile '!PY_ZIP!' } catch { exit 1 }"
+if exist "!PY_ZIP!" goto :py_zip_ready
+
+:: 3) bitsadmin (older Windows; survives some Group Policies that block PS)
+where bitsadmin >nul 2>nul
+if not errorlevel 1 (
+    echo   trying bitsadmin...
+    bitsadmin /transfer "MovementViewerPy" "!PY_URL!" "!PY_ZIP!" >nul
+    if exist "!PY_ZIP!" goto :py_zip_ready
+)
+
 if not exist "!PY_ZIP!" (
-    echo Could not download Python. Check your internet connection.
+    echo.
+    echo ============================================================
+    echo  Could not download Python.  Likely causes:
+    echo    - NYU/hospital firewall blocking python.org
+    echo    - PowerShell/curl/bitsadmin all restricted by Group Policy
+    echo.
+    echo  Workaround:  on an unrestricted machine, download
+    echo    !PY_URL!
+    echo  save it as:
+    echo    "%~dp0python-embed.zip"
+    echo  then re-run this script.
+    echo ============================================================
     pause
     exit /b 1
 )
+:py_zip_ready
 
 set "PORTABLE_DIR=!PORTABLE_DIR_APPDATA!"
 echo Extracting to %LOCALAPPDATA%\MovementViewer\...
