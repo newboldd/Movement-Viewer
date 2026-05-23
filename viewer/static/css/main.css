@@ -181,7 +181,10 @@ body { overflow: hidden; }
     flex: 1;
     cursor: pointer;
     height: 4px;
-    accent-color: var(--violet-bright);
+    /* Neutral light grey track (no coloured accent) — keeps the timeline
+       visually quiet so the orange-and-grey trim track in export mode
+       has the spotlight. */
+    accent-color: #c5c5c5;
 }
 
 /* Playback row */
@@ -265,8 +268,18 @@ body.export-mode #exportBtn {
     color: #fff;
     border-color: var(--violet-bright);
 }
-body.export-mode #sideToggle { border-color: var(--lime); }
-body.export-mode #sideToggle span { color: var(--lime) !important; }
+/* In export mode the OS|OD chip turns green (background) so its role
+   in the export pipeline is obvious.  The span text colors (active =
+   dark purple, inactive = lighter purple, set inline by JS) stay as-is
+   and remain legible on the green chip. */
+body.export-mode #sideToggle {
+    background: var(--lime);
+    border-color: var(--lime);
+}
+body.export-mode #sideToggle:hover {
+    background: #7dff7d;
+    border-color: #7dff7d;
+}
 
 #exportStatus {
     font-size: 11px;

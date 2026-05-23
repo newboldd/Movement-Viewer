@@ -630,11 +630,13 @@
             if (!isFinite(offsetX) || !isFinite(offsetY) || !isFinite(scale) || scale <= 0) {
                 scale = 1; offsetX = 0; offsetY = 0;
             }
-            // Crop box wins over pan when in export mode.
+            // Export-mode: crop-box handles win.  Clicking inside the
+            // box (no handle) falls through to pan — the crop frame
+            // stays fixed on screen and the video shifts beneath it.
             if (exportMode) {
                 const { mx, my } = _bufXY(e);
                 const hit = _cropHitTest(mx, my);
-                if (hit) {
+                if (hit && hit !== 'move') {
                     cropDragMode = hit;
                     cropDragStart = { mx, my, x: cropX, y: cropY, w: cropW, h: cropH };
                     e.preventDefault();
@@ -674,25 +676,53 @@
                 const dx = mx - s.mx, dy = my - s.my;
                 const minSize = 20;
                 const r = _visibleVideoRect();
-                if (cropDragMode === 'move') {
-                    const maxX = (r.right - r.left) - s.w;
-                    const maxY = (r.bot   - r.top)  - s.h;
-                    cropX = r.left + Math.max(0, Math.min(maxX, (s.x - r.left) + dx));
-                    cropY = r.top  + Math.max(0, Math.min(maxY, (s.y - r.top)  + dy));
+
+                // Corner handles (nw/ne/sw/se) keep aspect ratio.
+                // Side handles (n/s/e/w) change it freely.
+                const isCorner = (cropDragMode.length === 2);
+                if (isCorner) {
+                    const aspect = s.w / s.h;
+                    // The opposite corner is the anchor — it stays put.
+                    let anchorX, anchorY;
+                    if      (cropDragMode === 'se') { anchorX = s.x;       anchorY = s.y;       }
+                    else if (cropDragMode === 'sw') { anchorX = s.x + s.w; anchorY = s.y;       }
+                    else if (cropDragMode === 'ne') { anchorX = s.x;       anchorY = s.y + s.h; }
+                    else /* nw */                   { anchorX = s.x + s.w; anchorY = s.y + s.h; }
+
+                    let newW = Math.abs(mx - anchorX);
+                    let newH = Math.abs(my - anchorY);
+                    if (newW / newH > aspect) { newW = newH * aspect; }
+                    else                      { newH = newW / aspect; }
+
+                    // Clamp against the visible video rect (the corner
+                    // can only grow toward bounds in the direction of
+                    // the dragged handle).
+                    const maxW = (cropDragMode.includes('e'))
+                        ? (r.right - anchorX)
+                        : (anchorX - r.left);
+                    const maxH = (cropDragMode.includes('s'))
+                        ? (r.bot - anchorY)
+                        : (anchorY - r.top);
+                    if (newW > maxW) { newW = maxW; newH = newW / aspect; }
+                    if (newH > maxH) { newH = maxH; newW = newH * aspect; }
+
+                    if (newW < minSize) { newW = minSize; newH = minSize / aspect; }
+                    if (newH < minSize) { newH = minSize; newW = minSize * aspect; }
+
+                    cropW = newW; cropH = newH;
+                    cropX = (cropDragMode.includes('e')) ? anchorX : anchorX - newW;
+                    cropY = (cropDragMode.includes('s')) ? anchorY : anchorY - newH;
                 } else {
                     let nx = s.x, ny = s.y, nw = s.w, nh = s.h;
-                    if (cropDragMode.includes('w')) {
+                    if (cropDragMode === 'w') {
                         nx = Math.max(r.left, Math.min(s.x + s.w - minSize, s.x + dx));
                         nw = s.x + s.w - nx;
-                    }
-                    if (cropDragMode.includes('e')) {
+                    } else if (cropDragMode === 'e') {
                         nw = Math.max(minSize, Math.min(r.right - s.x, s.w + dx));
-                    }
-                    if (cropDragMode.includes('n')) {
+                    } else if (cropDragMode === 'n') {
                         ny = Math.max(r.top, Math.min(s.y + s.h - minSize, s.y + dy));
                         nh = s.y + s.h - ny;
-                    }
-                    if (cropDragMode.includes('s')) {
+                    } else if (cropDragMode === 's') {
                         nh = Math.max(minSize, Math.min(r.bot - s.y, s.h + dy));
                     }
                     cropX = nx; cropY = ny; cropW = nw; cropH = nh;
@@ -792,8 +822,9 @@
     }
 
     function _cursorForCrop(hit) {
+        // No 'move' case — interior clicks pan the underlying video,
+        // so leave the cursor default there.
         switch (hit) {
-            case 'move': return 'move';
             case 'n': case 's':  return 'ns-resize';
             case 'e': case 'w':  return 'ew-resize';
             case 'nw': case 'se': return 'nwse-resize';
@@ -857,11 +888,15 @@
         const b = Math.max(parseInt(tStart.value), parseInt(tEnd.value));
         const aP = (a / max) * 100;
         const bP = (b / max) * 100;
+        // In the kept region (between handles) show the crop accent
+        // green; outside, match the regular timeline's light-grey
+        // track so it reads as "trimmed away".
+        const GREY = '#c5c5c5';
         track.style.background =
             `linear-gradient(to right,
-                ${CROP_COLOR} 0%, ${CROP_COLOR} ${aP}%,
-                #2196f3 ${aP}%, #2196f3 ${bP}%,
-                ${CROP_COLOR} ${bP}%, ${CROP_COLOR} 100%)`;
+                ${GREY} 0%, ${GREY} ${aP}%,
+                ${CROP_COLOR} ${aP}%, ${CROP_COLOR} ${bP}%,
+                ${GREY} ${bP}%, ${GREY} 100%)`;
     }
 
     function enterExportMode() {
