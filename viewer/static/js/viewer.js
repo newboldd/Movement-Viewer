@@ -327,6 +327,11 @@
     // ── File loading ─────────────────────────────────────────
     async function loadFile(file) {
         if (!file) return;
+        // Switching videos invalidates whatever was being set up in
+        // export mode (trim ranges, crop window, possibly an in-flight
+        // export).  Drop out of export mode — and abort any running
+        // export — before swapping the source video.
+        if (exportMode) exitExportMode();
         // Saved-stereo + handle lookup.  pendingRecent (set by either
         // the recents-dropdown handler or by the showOpenFilePicker
         // pick) wins; then a direct DB lookup by (name, size); else
