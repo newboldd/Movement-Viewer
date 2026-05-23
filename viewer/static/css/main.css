@@ -167,19 +167,19 @@ body { overflow: hidden; }
     font-variant-numeric: tabular-nums;
 }
 .frame-counter strong { color: var(--text); font-weight: 700; }
-/* Tight after the time block, generous before "Frame" so the word
-   "Frame" sits visually paired with the frame-number that follows. */
-.frame-counter .counter-sep { margin: 0 14px 0 6px; opacity: 0.45; }
+.frame-counter .counter-sep { margin: 0 6px; opacity: 0.45; }
 /* Stable widths so the timeline doesn't reflow when the numbers grow.
    tabular-nums (above) gives every digit the same advance width, and
    these per-field min-widths cover the longest plausible values
    ("59:59.99" and 5-digit frame indices). */
 /* Current values right-align (their digits grow toward the "/").
-   Totals left-align (they sit flush against the "/"). */
-#timeDisplay       { display: inline-block; min-width: 7ch; text-align: right; }
-#totalTimeDisplay  { display: inline-block; min-width: 7ch; text-align: left;  }
-#frameDisplay      { display: inline-block; min-width: 5ch; text-align: right; }
-#totalFramesDisplay{ display: inline-block; min-width: 5ch; text-align: left;  }
+   Totals left-align (they sit flush against the "/").
+   "Frame N" is wrapped in .frame-block so the label sits glued to the
+   number — they move together as the number grows. */
+#timeDisplay       { display: inline-block; min-width: 7ch;  text-align: right; }
+#totalTimeDisplay  { display: inline-block; min-width: 7ch;  text-align: left;  }
+.frame-block       { display: inline-block; min-width: 11ch; text-align: right; }
+#totalFramesDisplay{ display: inline-block; min-width: 5ch;  text-align: left;  }
 
 .timeline-row input[type="range"] {
     flex: 1;
