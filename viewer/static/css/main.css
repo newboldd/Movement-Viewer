@@ -7,7 +7,7 @@
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
-    --violet-bright:#1f1f1f;     /* charcoal — sliders, checkboxes, primary action */
+    --violet-bright:#6a35aa;     /* slightly lighter purple than --bg — sliders, primary */
     --lime:         #5cff5c;     /* trim + crop overlay accent (bright green) */
     --lime-dark:    #2faa2f;
     --radius:       4px;
