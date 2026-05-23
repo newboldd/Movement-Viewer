@@ -128,6 +128,7 @@
             updateCameraButton();
             scale = 1; offsetX = 0; offsetY = 0;
             render();
+            e.target.blur();   // return focus so space-bar reaches play/pause
         });
 
         // Speed slider

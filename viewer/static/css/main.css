@@ -102,6 +102,15 @@ body { overflow: hidden; }
     background: var(--border);
     margin: 0 4px;
 }
+/* Prev / Play / Next: fixed equal width so the row doesn't jiggle when
+   the play button glyph (▶ vs. ⏸) changes. */
+#prevFrameBtn, #playBtn, #nextFrameBtn {
+    min-width: 38px;
+    text-align: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
 .speed-wrap { display: flex; align-items: center; gap: 6px; }
 .speed-wrap label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--blue); }
