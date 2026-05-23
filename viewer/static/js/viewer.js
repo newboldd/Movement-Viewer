@@ -50,14 +50,12 @@
     function dbg() {}   // no-op placeholder
 
     // ── Recent-videos store (IndexedDB) ────────────────────────
-    // We persist a single small record per file: { name, size, stereo,
-    // lastUsed, handle? }.  The optional `handle` is a
-    // FileSystemFileHandle (Chrome/Edge only) which lets us *re-open*
-    // the file later without prompting — exactly the behaviour the user
-    // wants when picking from the dropdown.  Handles can only live in
-    // IndexedDB; localStorage can't serialize them.  On browsers
-    // without the File System Access API the handle is simply absent
-    // and we fall back to the file picker.
+    // Each record: { name, size, stereo, lastUsed }.  Metadata only —
+    // we deliberately do NOT store FileSystemFileHandles, because the
+    // browser would later show a misleading "view and edit" permission
+    // prompt for read-only access.  Selecting a recent entry opens the
+    // file picker once; the saved stereo flag is restored by matching
+    // on (name, size).
     const RecentVideos = (() => {
         const DB_NAME = 'movement_viewer';
         const STORE   = 'recents';
@@ -116,16 +114,18 @@
             const arr = await _readAll();
             return arr.find(r => r.name === name && r.size === size) || null;
         }
-        async function touch(name, size, stereo, handle) {
+        async function touch(name, size, stereo) {
             let arr = await _readAll();
+            // Drop any leftover `handle` field from older records (the
+            // schema no longer stores them).
+            for (const r of arr) delete r.handle;
             const i = arr.findIndex(r => r.name === name && r.size === size);
             const now = Date.now();
             if (i >= 0) {
                 arr[i].lastUsed = now;
                 if (stereo !== undefined) arr[i].stereo = !!stereo;
-                if (handle)               arr[i].handle = handle;
             } else {
-                arr.push({ name, size, stereo: !!stereo, lastUsed: now, handle });
+                arr.push({ name, size, stereo: !!stereo, lastUsed: now });
             }
             arr.sort((a, b) => b.lastUsed - a.lastUsed);
             if (arr.length > MAX) arr = arr.slice(0, MAX);
@@ -150,11 +150,10 @@
     // (name, size) of the currently loaded file — used to drive the
     // dropdown selection and to scope stereo-checkbox writes.
     let currentLoaded = null;       // { name, size } or null
-    // Set when the user is mid-load via the recents dropdown (or a
-    // matching Load-Video file pick).  Carries the saved stereo flag,
-    // and the FileSystemFileHandle when we have one (so the next
-    // touch() persists it again).
-    let pendingRecent = null;       // { name, size, stereo, handle? } or null
+    // Set when the user is mid-load via the recents dropdown.
+    // Carries the saved stereo flag so loadFile() can apply it once
+    // the file lands.
+    let pendingRecent = null;       // { name, size, stereo } or null
 
     function _recentKey(r) { return `${r.name}|${r.size}`; }
 
@@ -217,45 +216,16 @@
         }
     }
 
-    // User picked an entry from the dropdown.  When we have a stored
-    // FileSystemFileHandle for that entry (Chrome/Edge after a prior
-    // Load-Video pick on this machine) we re-open it without showing
-    // any picker.  Otherwise we have to fall back to the picker.
+    // User picked an entry from the dropdown.  Open the file picker
+    // with the saved stereo flag pending — once the user re-selects the
+    // file, loadFile() will detect the match by (name, size) and
+    // restore that flag.
     async function _loadFromRecent(keyStr) {
         if (!keyStr) return;
         const [name, sizeStr] = keyStr.split('|');
         const size = parseInt(sizeStr);
         const rec = await RecentVideos.find(name, size);
         if (!rec) return;
-
-        if (rec.handle) {
-            try {
-                if (typeof rec.handle.queryPermission === 'function') {
-                    let perm = await rec.handle.queryPermission({ mode: 'read' });
-                    if (perm !== 'granted') {
-                        perm = await rec.handle.requestPermission({ mode: 'read' });
-                    }
-                    if (perm !== 'granted') {
-                        alert('Read permission was denied for that file.');
-                        return;
-                    }
-                }
-                const file = await rec.handle.getFile();
-                pendingRecent = {
-                    name: rec.name, size: rec.size,
-                    stereo: rec.stereo, handle: rec.handle,
-                };
-                loadFile(file);
-                return;
-            } catch (err) {
-                // Most likely NotFoundError (file moved/deleted).  Fall
-                // back to the file picker so the user can re-pick.
-                console.warn('Re-open via stored handle failed:', err);
-            }
-        }
-        // No handle available (older browser, or entry pre-dates the
-        // File System Access support): open the picker, but hold onto
-        // the saved stereo flag so it's restored once the file lands.
         pendingRecent = { name: rec.name, size: rec.size, stereo: rec.stereo };
         $('browseInput').click();
     }
@@ -292,24 +262,19 @@
     // ── File loading ─────────────────────────────────────────
     async function loadFile(file) {
         if (!file) return;
-        // Saved-stereo lookup: pendingRecent wins (set by either the
-        // dropdown handler or by the showOpenFilePicker handler), then
-        // a direct DB lookup, then null = "use the size heuristic".
+        // Saved-stereo lookup: pendingRecent wins (set by the dropdown
+        // handler), else a direct DB lookup by (name, size), else fall
+        // back to the size heuristic.
         let savedStereo = null;
-        let savedHandle = null;
         if (pendingRecent &&
             pendingRecent.name === file.name &&
             pendingRecent.size === file.size) {
             savedStereo = pendingRecent.stereo;
-            savedHandle = pendingRecent.handle || null;
         }
         if (savedStereo === null || savedStereo === undefined) {
             savedStereo = null;
             const rec = await RecentVideos.find(file.name, file.size);
-            if (rec) {
-                savedStereo = rec.stereo;
-                if (!savedHandle && rec.handle) savedHandle = rec.handle;
-            }
+            if (rec) savedStereo = rec.stereo;
         }
         pendingRecent = null;
         // Reset state
@@ -354,7 +319,7 @@
             // we have one) so the dropdown can re-open it directly next
             // time.  Then refresh the dropdown to put it at the top.
             currentLoaded = { name: file.name, size: file.size };
-            RecentVideos.touch(file.name, file.size, isStereo, savedHandle)
+            RecentVideos.touch(file.name, file.size, isStereo)
                         .then(_refreshRecentDropdown);
             // Seek to mid-first-frame (t=0 is often un-decodable).
             videoEl.currentTime = Math.min(0.5 / fps, videoEl.duration);
@@ -370,34 +335,8 @@
         $('sideToggle').addEventListener('click', switchCamera);
         $('resetZoomBtn').addEventListener('click', resetZoom);
 
-        $('browseBtn').addEventListener('click', async () => {
-            pendingRecent = null;
-            // Prefer the File System Access API so we can save the
-            // handle and re-open later without prompting.
-            if (window.showOpenFilePicker) {
-                try {
-                    const [handle] = await window.showOpenFilePicker({
-                        multiple: false,
-                        types: [{
-                            description: 'Videos',
-                            accept: {
-                                'video/*': ['.mp4', '.mov', '.webm', '.mkv', '.m4v', '.avi'],
-                            },
-                        }],
-                    });
-                    const file = await handle.getFile();
-                    pendingRecent = {
-                        name: file.name, size: file.size,
-                        stereo: undefined, handle,
-                    };
-                    loadFile(file);
-                    return;
-                } catch (err) {
-                    if (err && err.name === 'AbortError') return;
-                    console.warn('showOpenFilePicker failed, falling back:', err);
-                }
-            }
-            // Fallback: classic <input type=file> picker.
+        $('browseBtn').addEventListener('click', () => {
+            pendingRecent = null;       // fresh manual pick, no stored hint
             $('browseInput').click();
         });
         $('browseInput').addEventListener('change', e => {
