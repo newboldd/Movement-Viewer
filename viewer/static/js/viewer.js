@@ -182,33 +182,37 @@
         toggle.disabled = false;
         const curKey = currentLoaded ? _recentKey(currentLoaded) : null;
         const cur = curKey ? recs.find(r => _recentKey(r) === curKey) : null;
-        label.textContent = cur ? cur.name : recs[0].name;
+        // Before a video is loaded, show "Load Recent" instead of the
+        // most-recent filename — makes the action discoverable on first
+        // run and the label only shows a real title once one is open.
+        label.textContent = cur ? cur.name : 'Load Recent';
 
-        // Rebuild the rows.
+        // Rebuild the rows.  The currently loaded entry doesn't get a
+        // remove (×) button — protects against deleting the row that
+        // matches the video you're watching.
         panel.innerHTML = '';
         for (const r of recs) {
+            const isCurrent = curKey === _recentKey(r);
             const row = document.createElement('div');
-            row.className = 'recent-row' + (curKey === _recentKey(r) ? ' current' : '');
+            row.className = 'recent-row' + (isCurrent ? ' current' : '');
             row.dataset.key = _recentKey(r);
             row.innerHTML =
                 `<span class="recent-name"></span>` +
-                `<button type="button" class="recent-x" title="Remove from list">×</button>`;
+                (isCurrent ? '' : `<button type="button" class="recent-x" title="Remove from list">×</button>`);
             row.querySelector('.recent-name').textContent = r.name;
             row.addEventListener('click', e => {
                 if (e.target.closest('.recent-x')) return;   // X handled separately
                 _closeRecentPanel();
                 _loadFromRecent(row.dataset.key);
             });
-            row.querySelector('.recent-x').addEventListener('click', async e => {
-                e.stopPropagation();
-                await RecentVideos.remove(r.name, r.size);
-                if (currentLoaded &&
-                    currentLoaded.name === r.name &&
-                    currentLoaded.size === r.size) {
-                    currentLoaded = null;
-                }
-                _refreshRecentDropdown();
-            });
+            const xBtn = row.querySelector('.recent-x');
+            if (xBtn) {
+                xBtn.addEventListener('click', async e => {
+                    e.stopPropagation();
+                    await RecentVideos.remove(r.name, r.size);
+                    _refreshRecentDropdown();
+                });
+            }
             panel.appendChild(row);
         }
     }
