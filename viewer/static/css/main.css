@@ -167,7 +167,9 @@ body { overflow: hidden; }
     font-variant-numeric: tabular-nums;
 }
 .frame-counter strong { color: var(--text); font-weight: 700; }
-.frame-counter .counter-sep { margin: 0 6px; opacity: 0.45; }
+/* Tight after the time block, generous before "Frame" so the word
+   "Frame" sits visually paired with the frame-number that follows. */
+.frame-counter .counter-sep { margin: 0 14px 0 6px; opacity: 0.45; }
 /* Stable widths so the timeline doesn't reflow when the numbers grow.
    tabular-nums (above) gives every digit the same advance width, and
    these per-field min-widths cover the longest plausible values
