@@ -581,9 +581,23 @@
             playing = true;
             $('playBtn').innerHTML = '&#9646;&#9646;';
             if (playbackRate >= 0.0625) {
+                // Make sure the underlying <video> is at currentFrame
+                // before resuming playback — otherwise a still-pending
+                // seek (e.g. from a trim-slider drag) can cause the
+                // browser to start playing from the old time.
                 videoEl.playbackRate = Math.min(playbackRate, 16);
-                videoEl.play().catch(() => {});
-                playLoop();
+                const target = fps ? (currentFrame + 0.5) / fps : 0;
+                const start = () => {
+                    if (!playing) return;
+                    videoEl.play().catch(() => {});
+                    playLoop();
+                };
+                if (fps && Math.abs(videoEl.currentTime - target) > 1e-4) {
+                    videoEl.addEventListener('seeked', start, { once: true });
+                    videoEl.currentTime = target;
+                } else {
+                    start();
+                }
             } else {
                 videoEl.pause();
                 playStepManual();
