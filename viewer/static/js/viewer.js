@@ -972,7 +972,9 @@
         tStart.max = tEnd.max = Math.max(0, nFrames - 1);
         tStart.value = 0;
         tEnd.value = Math.max(0, nFrames - 1);
-        $('timelineSlider').style.display = 'none';
+        // Keep timelineSlider visible — its thumb stays as the
+        // current-frame indicator on top of the trim UI.  CSS hides
+        // its track and disables pointer events in export mode.
         $('trimUI').style.display = '';
         _updateTrimTrack();
         const btn = $('exportBtn');
@@ -988,7 +990,6 @@
         if (exportRunning) { _cancelRunningExport(); return; }
         exportMode = false;
         document.body.classList.remove('export-mode');
-        $('timelineSlider').style.display = '';
         $('trimUI').style.display = 'none';
         const btn = $('exportBtn');
         btn.textContent = 'Export Video';

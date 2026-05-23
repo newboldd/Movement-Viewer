@@ -263,6 +263,36 @@ body { overflow: hidden; }
     cursor: ew-resize;
 }
 
+/* Export-mode current-frame indicator: the regular timeline slider
+   stays in place as a grey-circle thumb floating on top of the trim
+   UI.  pointer-events:none ensures drags fall through to whichever
+   trim handle sits beneath it. */
+body.export-mode #timelineSlider {
+    background: transparent;
+    pointer-events: none;
+    z-index: 3;
+    -webkit-appearance: none; appearance: none;
+}
+body.export-mode #timelineSlider::-webkit-slider-runnable-track { background: transparent; }
+body.export-mode #timelineSlider::-moz-range-track             { background: transparent; }
+body.export-mode #timelineSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: #cfcfcf;
+    border: 1px solid #555;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    pointer-events: none;
+}
+body.export-mode #timelineSlider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    background: #cfcfcf;
+    border: 1px solid #555;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+    pointer-events: none;
+}
+
 /* Export-mode tints */
 body.export-mode #speedSlider { accent-color: var(--lime); }
 body.export-mode #speedDisplay,
