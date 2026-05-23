@@ -1,16 +1,15 @@
 /* Movement Viewer — NYU Langone palette (deep purple bg + lime accents). */
 :root {
-    --bg:           #57068c;     /* NYU Langone primary purple — main background */
-    --bg-card:      #3d0560;     /* deeper purple for the control bar */
-    --bg-button:    #2a0444;     /* darker than --bg for default buttons */
-    --bg-hover:     #3d0560;
+    --bg:           #4d2680;     /* muted royal purple — main background */
+    --bg-card:      #3a1c63;     /* slightly deeper purple for the control bar */
+    --bg-button:    #1f1f1f;     /* charcoal buttons */
+    --bg-hover:     #2e2e2e;
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
-    --purple-bright:#b100e8;     /* highlight (matches NYU "Starts Here" violet) */
-    --blue:         #3b82f6;     /* sliders, checkboxes, status links */
-    --lime:         #a3e635;     /* trim + crop overlay accent (bright lime) */
-    --lime-dark:    #65a30d;
+    --violet-bright:#7c2fff;     /* sliders, checkboxes, primary action */
+    --lime:         #5cff5c;     /* trim + crop overlay accent (bright green) */
+    --lime-dark:    #2faa2f;
     --radius:       4px;
 }
 
@@ -74,9 +73,9 @@ body { overflow: hidden; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.btn-sm { padding: 3px 9px; font-size: 12px; }
 .btn-primary {
-    background: var(--purple-bright);
+    background: var(--violet-bright);
     color: #fff;
-    border-color: var(--purple-bright);
+    border-color: var(--violet-bright);
 }
 .btn-primary:hover { background: #c233ef; border-color: #c233ef; }
 
@@ -109,7 +108,7 @@ body { overflow: hidden; }
     flex: 1;
     cursor: pointer;
     height: 4px;
-    accent-color: var(--blue);
+    accent-color: var(--violet-bright);
 }
 
 /* Playback row */
@@ -128,17 +127,17 @@ body { overflow: hidden; }
 
 .speed-wrap { display: flex; align-items: center; gap: 6px; }
 .speed-wrap label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--blue); }
+.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--violet-bright); }
 #speedDisplay {
     font-size: 11px;
-    color: var(--blue);
+    color: var(--violet-bright);
     font-weight: 600;
     min-width: 28px;
 }
 .spacer { flex: 1; }
 
 #stereoLabel { color: var(--text-muted); }
-#stereoCheckbox { accent-color: var(--blue); }
+#stereoCheckbox { accent-color: var(--violet-bright); }
 
 /* Trim sliders (export mode) */
 .timeline-wrap { position: relative; flex: 1; height: 24px; }
@@ -152,7 +151,7 @@ body { overflow: hidden; }
     position: absolute; left: 0; right: 0;
     top: 50%; transform: translateY(-50%);
     height: 6px; border-radius: 3px;
-    background: var(--blue);
+    background: var(--violet-bright);
     pointer-events: none;
 }
 .trim-slider {
@@ -189,9 +188,9 @@ body.export-mode #speedSlider { accent-color: var(--lime); }
 body.export-mode #speedDisplay,
 body.export-mode .speed-wrap label { color: var(--lime); }
 body.export-mode #exportBtn {
-    background: var(--purple-bright);
+    background: var(--violet-bright);
     color: #fff;
-    border-color: var(--purple-bright);
+    border-color: var(--violet-bright);
 }
 body.export-mode #sideToggle { border-color: var(--lime); }
 body.export-mode #sideToggle span { color: var(--lime) !important; }

@@ -42,7 +42,7 @@
     let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
     let cropDragMode = null;
     let cropDragStart = null;
-    const CROP_COLOR = '#84cc16';   // lime; matches --lime in main.css
+    const CROP_COLOR = '#5cff5c';   // bright green; matches --lime in main.css
     const CROP_HANDLE = 10;
     const CROP_HANDLE_DRAW = 8;
 
