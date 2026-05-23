@@ -49,117 +49,74 @@
     const $ = id => document.getElementById(id);
     function dbg() {}   // no-op placeholder
 
-    // ── Recent-videos store (IndexedDB) ──────────────────────
-    // Persists up to MAX recently loaded video Blobs across page reloads.
-    // Records: { id (auto), name, size, blob, lastUsed }.  The same
-    // (name, size) replaces the prior entry rather than duplicating.
+    // ── Recent-videos store (localStorage, metadata only) ──────
+    // Persists name + size + per-file stereo setting across page
+    // reloads.  We can't store filesystem paths (browsers don't expose
+    // them) or actual video blobs (would blow up localStorage and is
+    // heavy on disk) — so when the user picks a recent entry the file
+    // picker still has to open; we match by (name, size) afterwards to
+    // restore the saved stereo flag.
     const RecentVideos = (() => {
-        const DB_NAME = 'movement_viewer';
-        const STORE   = 'recent_videos';
-        const MAX     = 10;
-        let _db = null;
-
-        function _open() {
-            return new Promise((resolve, reject) => {
-                if (_db) return resolve(_db);
-                const req = indexedDB.open(DB_NAME, 1);
-                req.onupgradeneeded = e => {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains(STORE)) {
-                        db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-                    }
-                };
-                req.onsuccess = e => { _db = e.target.result; resolve(_db); };
-                req.onerror   = e => reject(e.target.error);
-            });
-        }
-
-        async function list() {
-            const db = await _open();
-            return new Promise((resolve, reject) => {
-                const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-                req.onsuccess = () => {
-                    const all = (req.result || []).slice();
-                    all.sort((a, b) => b.lastUsed - a.lastUsed);
-                    resolve(all);
-                };
-                req.onerror = e => reject(e.target.error);
-            });
-        }
-
-        async function add(file) {
+        const KEY = 'movement_viewer_recents';
+        const MAX = 10;
+        function _read() {
             try {
-                const db = await _open();
-                const existing = await list();
-                const dup = existing.find(r => r.name === file.name && r.size === file.size);
-                const now = Date.now();
-                await new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORE, 'readwrite');
-                    const store = tx.objectStore(STORE);
-                    const rec = { name: file.name, size: file.size, blob: file, lastUsed: now };
-                    if (dup) { rec.id = dup.id; store.put(rec); }
-                    else                       { store.add(rec); }
-                    tx.oncomplete = resolve;
-                    tx.onerror = e => reject(e.target.error);
-                });
-                // Trim to MAX
-                const all = await list();
-                if (all.length > MAX) {
-                    const toDelete = all.slice(MAX);
-                    const tx2 = db.transaction(STORE, 'readwrite');
-                    const s2 = tx2.objectStore(STORE);
-                    for (const r of toDelete) s2.delete(r.id);
-                    await new Promise((res, rej) => {
-                        tx2.oncomplete = res;
-                        tx2.onerror = e => rej(e.target.error);
-                    });
-                }
-            } catch (err) {
-                // Quota or corruption — log and ignore; the user can still
-                // re-pick the file via Load Video.
-                console.warn('RecentVideos.add failed:', err);
+                const raw = localStorage.getItem(KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                return Array.isArray(arr) ? arr : [];
+            } catch (_) { return []; }
+        }
+        function _write(arr) {
+            try { localStorage.setItem(KEY, JSON.stringify(arr)); } catch (_) {}
+        }
+        function list() {
+            const arr = _read();
+            arr.sort((a, b) => b.lastUsed - a.lastUsed);
+            return arr;
+        }
+        function find(name, size) {
+            return list().find(r => r.name === name && r.size === size) || null;
+        }
+        function touch(name, size, stereo) {
+            let arr = _read();
+            const i = arr.findIndex(r => r.name === name && r.size === size);
+            const now = Date.now();
+            if (i >= 0) {
+                arr[i].lastUsed = now;
+                if (stereo !== undefined) arr[i].stereo = !!stereo;
+            } else {
+                arr.push({ name, size, stereo: !!stereo, lastUsed: now });
+            }
+            arr.sort((a, b) => b.lastUsed - a.lastUsed);
+            if (arr.length > MAX) arr = arr.slice(0, MAX);
+            _write(arr);
+        }
+        function updateStereo(name, size, stereo) {
+            const arr = _read();
+            const i = arr.findIndex(r => r.name === name && r.size === size);
+            if (i >= 0) {
+                arr[i].stereo = !!stereo;
+                _write(arr);
             }
         }
-
-        async function get(id) {
-            const db = await _open();
-            return new Promise((resolve, reject) => {
-                const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(id);
-                req.onsuccess = () => {
-                    if (!req.result) return resolve(null);
-                    const rec = req.result;
-                    // Reconstruct a File so the rest of the loadFile path
-                    // (which expects a File-like .name) stays unchanged.
-                    let f;
-                    try {
-                        f = new File([rec.blob], rec.name, { type: rec.blob.type });
-                    } catch (_) {
-                        f = rec.blob;   // very old browsers — Blob is enough
-                        f.name = rec.name;
-                    }
-                    // Touch lastUsed (best-effort; ignore failure).
-                    try {
-                        const tx = db.transaction(STORE, 'readwrite');
-                        tx.objectStore(STORE).put({ ...rec, lastUsed: Date.now() });
-                    } catch (_) {}
-                    resolve(f);
-                };
-                req.onerror = e => reject(e.target.error);
-            });
-        }
-
-        return { list, add, get };
+        return { list, find, touch, updateStereo };
     })();
 
-    // Track the IndexedDB id of the currently loaded video (so the
-    // dropdown stays in sync when a file is loaded via Load Video).
-    let currentRecentId = null;
+    // (name, size) of the currently loaded file — used to drive the
+    // dropdown selection and to scope stereo-checkbox writes.
+    let currentLoaded = null;       // { name, size } or null
+    // Set when the user selects a recent from the dropdown.  Carries
+    // the expected name/size so the next file-pick can detect a match
+    // and restore the saved stereo flag.
+    let pendingRecent = null;       // { name, size, stereo } or null
 
-    async function _refreshRecentDropdown() {
+    function _recentKey(r) { return `${r.name}|${r.size}`; }
+
+    function _refreshRecentDropdown() {
         const sel = $('recentSelect');
         if (!sel) return;
-        let recs = [];
-        try { recs = await RecentVideos.list(); } catch (_) {}
+        const recs = RecentVideos.list();
         sel.innerHTML = '';
         if (recs.length === 0) {
             const opt = document.createElement('option');
@@ -171,31 +128,28 @@
         sel.disabled = false;
         for (const r of recs) {
             const opt = document.createElement('option');
-            opt.value = String(r.id);
+            opt.value = _recentKey(r);
             opt.textContent = r.name;
             sel.appendChild(opt);
         }
-        // If we know the currently loaded id, select it; otherwise the
-        // most-recent entry (index 0) is selected by default.
-        if (currentRecentId != null) {
-            sel.value = String(currentRecentId);
-            // If that record was trimmed off the end of the list, fall
-            // back to the top.
+        if (currentLoaded) {
+            sel.value = _recentKey(currentLoaded);
             if (sel.selectedIndex < 0) sel.selectedIndex = 0;
         }
     }
 
-    async function _loadFromRecent(idStr) {
-        if (!idStr) return;
-        const id = parseInt(idStr);
-        let file = null;
-        try { file = await RecentVideos.get(id); } catch (_) {}
-        if (!file) {
-            alert('Could not load that video (storage may have been cleared).');
-            return;
-        }
-        currentRecentId = id;
-        loadFile(file, /* alreadyRecent */ true);
+    // User picked an entry from the dropdown.  We can't open the file
+    // from disk on the user's behalf — paths aren't available to the
+    // browser — so trigger the picker; if the file they pick matches
+    // the entry by (name, size) we restore the saved stereo setting.
+    function _loadFromRecent(keyStr) {
+        if (!keyStr) return;
+        const [name, sizeStr] = keyStr.split('|');
+        const size = parseInt(sizeStr);
+        const rec = RecentVideos.find(name, size);
+        if (!rec) return;
+        pendingRecent = { name: rec.name, size: rec.size, stereo: rec.stereo };
+        $('browseInput').click();
     }
 
     // IDs of controls that should only be active once a video is loaded.
@@ -226,8 +180,26 @@
     }
 
     // ── File loading ─────────────────────────────────────────
-    function loadFile(file, alreadyRecent) {
+    function loadFile(file) {
         if (!file) return;
+        // If the user came in via the recent-videos dropdown and the
+        // file they picked matches the expected entry, use that record's
+        // saved stereo flag instead of the size-based auto-detect.  If
+        // they picked a different file, drop the pending hint.
+        let savedStereo = null;
+        if (pendingRecent &&
+            pendingRecent.name === file.name &&
+            pendingRecent.size === file.size) {
+            savedStereo = pendingRecent.stereo;
+        }
+        // Always look up the existing record (the user may pick a
+        // previously-seen file via Load Video without going through the
+        // dropdown).
+        if (savedStereo === null) {
+            const rec = RecentVideos.find(file.name, file.size);
+            if (rec) savedStereo = rec.stereo;
+        }
+        pendingRecent = null;
         // Reset state
         currentFrame = 0;
         scale = 1; offsetX = 0; offsetY = 0;
@@ -239,11 +211,14 @@
         videoEl.addEventListener('loadedmetadata', () => {
             vidW = videoEl.videoWidth;
             vidH = videoEl.videoHeight;
-            // Auto-detect stereo: side-by-side videos are markedly wider
-            // than 1:1 (e.g. 3840×1080).  Threshold at 2:1.
-            const stereoGuess = vidW >= 2 * vidH;
-            $('stereoCheckbox').checked = stereoGuess;
-            isStereo = stereoGuess;
+            // Stereo flag: use the per-file saved preference if we've
+            // seen this file before; otherwise fall back to the
+            // aspect-ratio heuristic (≥ 2:1 = side-by-side).
+            const stereoFlag = (savedStereo !== null)
+                ? savedStereo
+                : (vidW >= 2 * vidH);
+            $('stereoCheckbox').checked = stereoFlag;
+            isStereo = stereoFlag;
             midline = isStereo ? Math.round(vidW / 2) : vidW;
             currentSide = cameraNames[0];
             currentCameraIdx = 0;
@@ -263,21 +238,11 @@
             $('dropHint').classList.add('hidden');
             _setLoaded(true);
             sizeCanvas();
-            // Add to the recent-videos store (no-op when the file is a
-            // round-trip from IDB and was just bumped by RecentVideos.get).
-            if (!alreadyRecent) {
-                RecentVideos.add(file).then(async () => {
-                    // The newly added record is the most recent → top of
-                    // the list.  Read it back to pick up its assigned id.
-                    try {
-                        const recs = await RecentVideos.list();
-                        if (recs.length > 0) currentRecentId = recs[0].id;
-                    } catch (_) {}
-                    _refreshRecentDropdown();
-                });
-            } else {
-                _refreshRecentDropdown();
-            }
+            // Persist this file's metadata (bumps lastUsed) and stamp the
+            // current stereo flag.  The dropdown will sort it to the top.
+            currentLoaded = { name: file.name, size: file.size };
+            RecentVideos.touch(file.name, file.size, isStereo);
+            _refreshRecentDropdown();
             // Seek to mid-first-frame (t=0 is often un-decodable).
             videoEl.currentTime = Math.min(0.5 / fps, videoEl.duration);
             videoEl.addEventListener('seeked', render, { once: true });
@@ -292,13 +257,13 @@
         $('sideToggle').addEventListener('click', switchCamera);
         $('resetZoomBtn').addEventListener('click', resetZoom);
 
-        $('browseBtn').addEventListener('click', () => $('browseInput').click());
+        $('browseBtn').addEventListener('click', () => {
+            pendingRecent = null;         // a manual click is not a recent re-pick
+            $('browseInput').click();
+        });
         $('browseInput').addEventListener('change', e => {
             const file = e.target.files[0];
-            if (file) {
-                currentRecentId = null;   // will be set after RecentVideos.add
-                loadFile(file);
-            }
+            if (file) loadFile(file);
             e.target.value = '';
         });
 
@@ -317,6 +282,10 @@
             updateCameraButton();
             scale = 1; offsetX = 0; offsetY = 0;
             render();
+            // Remember the user's choice for this specific file.
+            if (currentLoaded) {
+                RecentVideos.updateStereo(currentLoaded.name, currentLoaded.size, isStereo);
+            }
             e.target.blur();   // return focus so space-bar reaches play/pause
         });
 
