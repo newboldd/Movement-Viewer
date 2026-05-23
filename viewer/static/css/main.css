@@ -2,8 +2,9 @@
 :root {
     --bg:           #4d2680;     /* muted royal purple — main background */
     --bg-card:      #3a1c63;     /* slightly deeper purple for the control bar */
-    --bg-button:    #1f1f1f;     /* charcoal buttons */
-    --bg-hover:     #2e2e2e;
+    --bg-button:    #ffffff;     /* white buttons */
+    --bg-hover:     #efe7f5;     /* very light purple tint on hover */
+    --btn-text:     #2d0f5a;     /* dark purple text for buttons */
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
@@ -59,17 +60,18 @@ body { overflow: hidden; }
 .btn {
     display: inline-block;
     padding: 4px 10px;
-    border: 1px solid var(--border);
+    border: 1px solid transparent;
     border-radius: var(--radius);
     background: var(--bg-button);
-    color: var(--text);
+    color: var(--btn-text);
     font: inherit;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     user-select: none;
     transition: background 0.15s, border-color 0.15s;
 }
-.btn:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.4); }
+.btn:hover { background: var(--bg-hover); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.btn-sm { padding: 3px 9px; font-size: 12px; }
 .btn-primary {
