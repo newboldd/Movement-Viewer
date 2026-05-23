@@ -7,7 +7,7 @@
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
-    --violet-bright:#7c2fff;     /* sliders, checkboxes, primary action */
+    --violet-bright:#1f1f1f;     /* charcoal — sliders, checkboxes, primary action */
     --lime:         #5cff5c;     /* trim + crop overlay accent (bright green) */
     --lime-dark:    #2faa2f;
     --radius:       4px;
@@ -130,7 +130,7 @@ body { overflow: hidden; }
 .speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--violet-bright); }
 #speedDisplay {
     font-size: 11px;
-    color: var(--violet-bright);
+    color: var(--text);
     font-weight: 600;
     min-width: 28px;
 }
