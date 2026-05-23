@@ -20,6 +20,7 @@ html, body {
     background: var(--bg);
     color: var(--text);
     font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-weight: 600;
 }
 body { overflow: hidden; }
 
@@ -66,7 +67,7 @@ body { overflow: hidden; }
     color: var(--btn-text);
     font: inherit;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
     user-select: none;
     transition: background 0.15s, border-color 0.15s;

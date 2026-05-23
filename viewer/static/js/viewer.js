@@ -176,8 +176,8 @@
         if (!isStereo) { btn.style.display = 'none'; return; }
         btn.style.display = '';
         const opts = [cameraNames[0], cameraNames[1]];
-        const act = 'color:var(--text);font-weight:bold;';
-        const ina = 'color:var(--text-muted);';
+        const act = 'color:var(--btn-text);font-weight:700;';
+        const ina = 'color:var(--violet-bright);font-weight:500;';
         btn.innerHTML = opts.map((name, i) => {
             const span = `<span style="${name === currentSide ? act : ina}">${name}</span>`;
             const sep = (i < opts.length - 1)
