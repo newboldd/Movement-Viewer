@@ -8,6 +8,7 @@
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
     --purple-bright:#b100e8;     /* highlight (matches NYU "Starts Here" violet) */
+    --blue:         #3b82f6;     /* sliders, checkboxes, status links */
     --lime:         #a3e635;     /* trim + crop overlay accent (bright lime) */
     --lime-dark:    #65a30d;
     --radius:       4px;
@@ -108,7 +109,7 @@ body { overflow: hidden; }
     flex: 1;
     cursor: pointer;
     height: 4px;
-    accent-color: var(--purple-bright);
+    accent-color: var(--blue);
 }
 
 /* Playback row */
@@ -127,17 +128,17 @@ body { overflow: hidden; }
 
 .speed-wrap { display: flex; align-items: center; gap: 6px; }
 .speed-wrap label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--purple-bright); }
+.speed-wrap input[type="range"] { width: 80px; cursor: pointer; height: 4px; accent-color: var(--blue); }
 #speedDisplay {
     font-size: 11px;
-    color: var(--purple-bright);
+    color: var(--blue);
     font-weight: 600;
     min-width: 28px;
 }
 .spacer { flex: 1; }
 
 #stereoLabel { color: var(--text-muted); }
-#stereoCheckbox { accent-color: var(--purple-bright); }
+#stereoCheckbox { accent-color: var(--blue); }
 
 /* Trim sliders (export mode) */
 .timeline-wrap { position: relative; flex: 1; height: 24px; }
@@ -151,7 +152,7 @@ body { overflow: hidden; }
     position: absolute; left: 0; right: 0;
     top: 50%; transform: translateY(-50%);
     height: 6px; border-radius: 3px;
-    background: var(--purple-bright);
+    background: var(--blue);
     pointer-events: none;
 }
 .trim-slider {
