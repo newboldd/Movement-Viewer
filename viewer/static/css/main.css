@@ -172,14 +172,14 @@ body { overflow: hidden; }
    tabular-nums (above) gives every digit the same advance width, and
    these per-field min-widths cover the longest plausible values
    ("59:59.99" and 5-digit frame indices). */
-/* Current values right-align (their digits grow toward the "/").
-   Totals left-align (they sit flush against the "/").
-   "Frame N" is wrapped in .frame-block so the label sits glued to the
-   number — they move together as the number grows. */
-#timeDisplay       { display: inline-block; min-width: 7ch;  text-align: right; }
-#totalTimeDisplay  { display: inline-block; min-width: 7ch;  text-align: left;  }
-.frame-block       { display: inline-block; min-width: 11ch; text-align: right; }
-#totalFramesDisplay{ display: inline-block; min-width: 5ch;  text-align: left;  }
+/* Counter-field widths are tuned per-video (set as CSS vars on the
+   root element in JS) so the spacing is tight when the *last* frame's
+   time and frame numbers are shown.  Until a video is loaded, sensible
+   small defaults keep the row from sprawling. */
+#timeDisplay       { display: inline-block; min-width: var(--time-w, 7ch);        text-align: right; }
+#totalTimeDisplay  { display: inline-block; min-width: var(--time-w, 7ch);        text-align: left;  }
+.frame-block       { display: inline-block; min-width: var(--frame-w, 7ch);       text-align: right; }
+#totalFramesDisplay{ display: inline-block; min-width: var(--total-frame-w, 1ch); text-align: left;  }
 
 .timeline-row input[type="range"] {
     flex: 1;

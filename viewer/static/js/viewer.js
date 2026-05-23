@@ -69,6 +69,20 @@
         if (ttd) ttd.textContent = _fmtTime(Math.max(0, nFrames - 1));
     }
 
+    /** Resize the time/frame counter boxes so they fit the last frame's
+     *  values exactly (no slack at the max).  Called once per loaded
+     *  video. */
+    function _updateCounterWidths() {
+        const lastFrame   = Math.max(0, nFrames - 1);
+        const frameDigits = String(lastFrame).length;
+        const lastTime    = _fmtTime(lastFrame);           // e.g. "0:59.99"
+        const timeChars   = lastTime.length;
+        const r = document.documentElement.style;
+        r.setProperty('--time-w',        `${timeChars}ch`);
+        r.setProperty('--frame-w',       `${6 + frameDigits}ch`);   // "Frame " + N
+        r.setProperty('--total-frame-w', `${frameDigits}ch`);
+    }
+
     // ── Recent-videos store (IndexedDB) ────────────────────────
     // Each record: { name, size, stereo, lastUsed, handle? }.  The
     // optional `handle` is a FileSystemFileHandle (Chrome/Edge) that
@@ -369,6 +383,7 @@
             $('timelineSlider').max = nFrames - 1;
             $('timelineSlider').value = 0;
             $('frameDisplay').textContent = 0;
+            _updateCounterWidths();
             _refreshTimeDisplay();
             _setLoaded(true);
             sizeCanvas();
