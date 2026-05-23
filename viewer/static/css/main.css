@@ -168,6 +168,12 @@ body { overflow: hidden; }
 }
 .frame-counter strong { color: var(--text); font-weight: 700; }
 .frame-counter .counter-sep { margin: 0 6px; opacity: 0.45; }
+/* Stable widths so the timeline doesn't reflow when the numbers grow.
+   tabular-nums (above) gives every digit the same advance width, and
+   these per-field min-widths cover the longest plausible values
+   ("59:59.99" and 5-digit frame indices). */
+#timeDisplay, #totalTimeDisplay { display: inline-block; min-width: 7ch; text-align: right; }
+#frameDisplay, #totalFramesDisplay { display: inline-block; min-width: 5ch; text-align: right; }
 
 .timeline-row input[type="range"] {
     flex: 1;
