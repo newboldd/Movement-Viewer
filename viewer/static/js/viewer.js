@@ -1137,7 +1137,7 @@
         // Tags: camera (stereo only), "_Crop" iff the crop is not the
         // full source half/frame, and "_{rate}x" iff rate ≠ 1.
         const camTag   = isStereo ? `_${currentSide}` : '';
-        const cropTag  = _cropIsFullSource() ? '' : '_Crop';
+        const cropTag  = _cropIsFullSource() ? '' : '_crop';
         const speedTag = (playbackRate === 1) ? '' : `_${playbackRate}x`;
         let saveHandle = null;
         try {
