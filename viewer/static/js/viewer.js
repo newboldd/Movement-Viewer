@@ -1139,10 +1139,14 @@
         const camTag   = isStereo ? `_${currentSide}` : '';
         const cropTag  = _cropIsFullSource() ? '' : '_crop';
         const speedTag = (playbackRate === 1) ? '' : `_${playbackRate}x`;
+        // Trim tag: included only when the trim range isn't the whole
+        // video (first to last frame).
+        const isFullRange = (startFrame === 0 && endFrame === nFrames - 1);
+        const trimTag  = isFullRange ? '' : `_trim${startFrame}-${endFrame}`;
         let saveHandle = null;
         try {
             saveHandle = await window.showSaveFilePicker({
-                suggestedName: `${stem}${camTag}${cropTag}${speedTag}.mp4`,
+                suggestedName: `${stem}${camTag}${cropTag}${speedTag}${trimTag}.mp4`,
                 types: [{
                     description: 'MP4 video',
                     accept: { 'video/mp4': ['.mp4'] },
