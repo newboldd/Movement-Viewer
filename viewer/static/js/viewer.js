@@ -370,7 +370,6 @@
             $('timelineSlider').value = 0;
             $('frameDisplay').textContent = 0;
             _refreshTimeDisplay();
-            $('dropHint').classList.add('hidden');
             _setLoaded(true);
             sizeCanvas();
             // Persist this file's metadata (and FileSystemFileHandle if
