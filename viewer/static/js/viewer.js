@@ -11,6 +11,20 @@
     const SPEED_PRESETS = [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 30, 60, 120];
     const SPEED_DEFAULT_IDX = SPEED_PRESETS.indexOf(1);
 
+    // Transport-glyph rendering differs by OS: Windows draws unicode ←/→
+    // as hairlines and ▮▮ as chunky blocks.  Use SVG icons on Windows so
+    // they match the (already-nice) Mac unicode rendering; leave Mac on
+    // its native glyphs.  Play (▶) renders fine on both, so unicode wins.
+    const _isWindows = /Win/i.test(navigator.platform) ||
+                       /Windows/i.test(navigator.userAgent);
+    const _SVG_LEFT  = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M19 12 H5 M11 6 L5 12 L11 18"/></svg>`;
+    const _SVG_RIGHT = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M5 12 H19 M13 6 L19 12 L13 18"/></svg>`;
+    const _SVG_PAUSE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="vertical-align:middle;display:inline-block;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    const PLAY_HTML  = '&#9654;';
+    const PAUSE_HTML = _isWindows ? _SVG_PAUSE : '&#9646;&#9646;';
+    const PREV_HTML  = _isWindows ? _SVG_LEFT  : '&#8592;';
+    const NEXT_HTML  = _isWindows ? _SVG_RIGHT : '&#8594;';
+
     // ── State ────────────────────────────────────────────────
     let videoEl = null;
     let vidW = 0, vidH = 0, midline = 0;
@@ -351,6 +365,11 @@
         ctx = canvas.getContext('2d');
         videoEl = document.createElement('video');
         videoEl.muted = true;
+
+        // Swap the unicode prev/next glyphs for SVGs on Windows (no-op
+        // on Mac — both consts hold the same unicode entities there).
+        $('prevFrameBtn').innerHTML = PREV_HTML;
+        $('nextFrameBtn').innerHTML = NEXT_HTML;
         setupControls();
         setupCanvasEvents();
         _wireTrimHandles();
@@ -633,10 +652,10 @@
                 else cancelAnimationFrame(playTimer);
                 playTimer = null;
             }
-            $('playBtn').innerHTML = '&#9654;';
+            $('playBtn').innerHTML = PLAY_HTML;
         } else {
             playing = true;
-            $('playBtn').innerHTML = '&#9646;&#9646;';
+            $('playBtn').innerHTML = PAUSE_HTML;
             if (playbackRate >= 0.0625) {
                 // Make sure the underlying <video> is at currentFrame
                 // before resuming playback — otherwise a still-pending
