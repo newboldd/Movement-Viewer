@@ -247,6 +247,10 @@
 
     // ── Init ────────────────────────────────────────────────
     function init() {
+        // Clean up vestigial data from earlier versions of the app —
+        // the current code only persists metadata in IndexedDB.
+        try { localStorage.removeItem('movement_viewer_recents'); } catch (_) {}
+
         canvas = $('canvas');
         ctx = canvas.getContext('2d');
         videoEl = document.createElement('video');
@@ -379,8 +383,23 @@
         speedSlider.addEventListener('input', () => {
             playbackRate = SPEED_PRESETS[parseInt(speedSlider.value)];
             $('speedDisplay').textContent = playbackRate + 'x';
-            if (playing && playbackRate >= 0.0625) {
-                videoEl.playbackRate = Math.max(0.0625, Math.min(playbackRate, 16));
+            if (!playing) return;
+            // Cancel whichever play mode is currently running, then
+            // re-enter the one that matches the new rate.  Without this
+            // a slow→fast change keeps the manual stepper (jittery) and
+            // a fast→slow change keeps native playback (too fast).
+            if (playTimer) {
+                if (typeof playTimer === 'number') clearTimeout(playTimer);
+                else cancelAnimationFrame(playTimer);
+                playTimer = null;
+            }
+            if (playbackRate >= 0.0625) {
+                videoEl.playbackRate = Math.min(playbackRate, 16);
+                if (videoEl.paused) videoEl.play().catch(() => {});
+                playLoop();
+            } else {
+                videoEl.pause();
+                playStepManual();
             }
         });
         // Blur on release so subsequent space-bar presses hit Play/Pause
