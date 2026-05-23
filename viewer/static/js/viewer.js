@@ -49,15 +49,18 @@
     const $ = id => document.getElementById(id);
     function dbg() {}   // no-op placeholder
 
-    /** Format a frame index as "M:SS.mmm" using the current fps. */
+    /** Format a frame index as "M:SS.cc" (2-digit centisecond) using the current fps. */
     function _fmtTime(frameIdx) {
-        if (!fps || !isFinite(frameIdx)) return '0:00.000';
+        if (!fps || !isFinite(frameIdx)) return '0:00.00';
         const sec = frameIdx / fps;
         const m = Math.floor(sec / 60);
         const rem = sec - m * 60;
         const s = Math.floor(rem);
-        const ms = Math.round((rem - s) * 1000);
-        return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        const cs = Math.round((rem - s) * 100);
+        // Roll over if hundredths round up to 100.
+        const cs2 = cs === 100 ? 0 : cs;
+        const s2  = cs === 100 ? s + 1 : s;
+        return `${m}:${String(s2).padStart(2, '0')}.${String(cs2).padStart(2, '0')}`;
     }
     function _refreshTimeDisplay() {
         const td  = $('timeDisplay');
