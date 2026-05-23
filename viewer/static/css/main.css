@@ -113,12 +113,6 @@ body { overflow: hidden; }
     font-weight: 600;
 }
 .recent-row:hover { background: var(--bg-hover); }
-.recent-row.current::before {
-    content: '●';
-    color: var(--violet-bright);
-    font-size: 9px;
-    margin-right: 2px;
-}
 .recent-row.current { font-weight: 800; }
 .recent-name {
     flex: 1;
