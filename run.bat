@@ -3,6 +3,19 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
+:: ── First-run: create a "Movement Viewer.lnk" shortcut so users see
+::    the hand icon (icon.ico) instead of the generic .bat icon.
+if exist "icon.ico" if not exist "Movement Viewer.lnk" (
+    powershell -NoProfile -Command ^
+        "$ws = New-Object -ComObject WScript.Shell;" ^
+        "$sc = $ws.CreateShortcut((Join-Path (Get-Location) 'Movement Viewer.lnk'));" ^
+        "$sc.TargetPath = (Join-Path (Get-Location) 'run.bat');" ^
+        "$sc.WorkingDirectory = (Get-Location).Path;" ^
+        "$sc.IconLocation = (Join-Path (Get-Location) 'icon.ico');" ^
+        "$sc.Description = 'Movement Viewer';" ^
+        "$sc.Save()" >nul 2>&1
+)
+
 :: ── Find Python ────────────────────────────────────────────────
 :: Priority: .venv > active conda env > portable Python > system python > auto-install
 set "PYTHON="
