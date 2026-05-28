@@ -1402,6 +1402,12 @@
         exportAbort = new AbortController();
         btn.disabled = true;
         cancelBtn.disabled = false;
+        // While the job is in flight, the configuration affordances
+        // shouldn't change — hide Add/Set speed and the global
+        // frame#/time stamp checkboxes.  They reappear when the job
+        // finishes (or is cancelled) below.
+        $('addSpeedBtn').style.display = 'none';
+        $('exportFrameStampRow').style.display = 'none';
         status.textContent = 'Starting…';
         const _checkAbort = () => {
             if (exportAbortRequested) throw new DOMException('Cancelled', 'AbortError');
@@ -1589,6 +1595,12 @@
             exportAbortRequested = false;
             btn.disabled = false;
             cancelBtn.disabled = false;
+            // Restore the queue-config controls if we're still in
+            // export mode (cancellation drops us out).
+            if (!wasAborted && exportMode) {
+                $('addSpeedBtn').style.display = '';
+                $('exportFrameStampRow').style.display = '';
+            }
             _updateAddSpeedBtn();
             if (wasAborted) exitExportMode();
         }

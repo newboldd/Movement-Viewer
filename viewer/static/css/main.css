@@ -292,6 +292,39 @@ body.export-mode #speedSlider { accent-color: var(--lime); }
 body.export-mode #speedDisplay,
 body.export-mode .speed-wrap label { color: var(--lime); }
 
+/* Resting "Export Video" button: green outline so the launching
+   affordance reads as the same colour family as the export-mode UI. */
+#exportBtn {
+    border-color: var(--lime) !important;
+    color: var(--lime);
+}
+#exportBtn:hover { background: rgba(92, 255, 92, 0.10); }
+
+/* In export mode the button text flips to "Export" and runs the
+   actual job — fill it green so it pops as the primary action. */
+body.export-mode #exportBtn.btn-primary {
+    background: var(--lime) !important;
+    color: #0a2c0a !important;
+    border-color: var(--lime-dark) !important;
+}
+body.export-mode #exportBtn.btn-primary:hover {
+    background: var(--lime-dark) !important;
+    border-color: var(--lime-dark) !important;
+}
+body.export-mode #exportBtn:disabled {
+    opacity: 0.55;
+}
+
+/* Add/Set speed button: green outline to match the rest of the
+   export-mode controls. */
+body.export-mode #addSpeedBtn {
+    border-color: var(--lime) !important;
+    color: var(--lime);
+}
+body.export-mode #addSpeedBtn:hover:not([disabled]):not(.dim) {
+    background: rgba(92, 255, 92, 0.12);
+}
+
 /* Inline speed-queue tags shown next to the Export button. */
 body.export-mode #addSpeedBtn,
 body.export-mode #exportSpeedTags,
