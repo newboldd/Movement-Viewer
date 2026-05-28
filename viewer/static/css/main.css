@@ -1,14 +1,18 @@
 /* Movement Viewer — NYU Langone palette (deep purple bg + lime accents). */
 :root {
-    --bg:           #4d2680;     /* muted royal purple — main background */
-    --bg-card:      #3a1c63;     /* slightly deeper purple for the control bar */
+    /* Palette matches play_icon.png — vivid magenta-purple body
+       with a darker purple shadow ring and a teal play triangle. */
+    --bg:           #5a1f8e;     /* main background — slightly muted icon purple */
+    --bg-card:      #461675;     /* control bar — deeper purple-black */
     --bg-button:    #efe7f5;     /* light purple tint at rest */
     --bg-hover:     #ffffff;     /* white on hover */
-    --btn-text:     #2d0f5a;     /* dark purple text for buttons */
+    --btn-text:     #2d0f5a;     /* dark-purple text & dark-purple fills */
+    --purple-deep:  #2d0f5a;     /* shadow-ring colour from the icon */
     --text:         #ffffff;
     --text-muted:   rgba(255,255,255,0.72);
     --border:       rgba(255,255,255,0.22);
-    --violet-bright:#6a35aa;     /* slightly lighter purple than --bg — sliders, primary */
+    --violet-bright:#8e30c2;     /* vivid icon-body purple — sliders, primary */
+    --teal:         #6dd0b3;     /* icon play-triangle teal (accent) */
     --lime:         #5cff5c;     /* trim + crop overlay accent (bright green) */
     --lime-dark:    #2faa2f;
     --radius:       4px;
@@ -292,19 +296,24 @@ body.export-mode #speedSlider { accent-color: var(--lime); }
 body.export-mode #speedDisplay,
 body.export-mode .speed-wrap label { color: var(--lime); }
 
-/* Resting "Export Video" button: green outline so the launching
-   affordance reads as the same colour family as the export-mode UI. */
+/* Resting "Export Video" button: bright-green outline + text on a
+   dark-purple fill, matching the icon's shadow ring.  The fill
+   gives the green text enough contrast to read against any
+   background colour. */
 #exportBtn {
+    background: var(--purple-deep) !important;
     border-color: var(--lime) !important;
-    color: var(--lime);
+    color: var(--lime) !important;
 }
-#exportBtn:hover { background: rgba(92, 255, 92, 0.10); }
+#exportBtn:hover:not(.btn-primary):not(:disabled) {
+    background: #3d1670 !important;
+}
 
 /* In export mode the button text flips to "Export" and runs the
    actual job — fill it green so it pops as the primary action. */
 body.export-mode #exportBtn.btn-primary {
     background: var(--lime) !important;
-    color: #0a2c0a !important;
+    color: var(--purple-deep) !important;
     border-color: var(--lime-dark) !important;
 }
 body.export-mode #exportBtn.btn-primary:hover {
@@ -315,14 +324,15 @@ body.export-mode #exportBtn:disabled {
     opacity: 0.55;
 }
 
-/* Add/Set speed button: green outline to match the rest of the
-   export-mode controls. */
+/* Add/Set speed button: same colour combo as the resting Export
+   Video button — bright-green outline + text on dark purple. */
 body.export-mode #addSpeedBtn {
+    background: var(--purple-deep) !important;
     border-color: var(--lime) !important;
-    color: var(--lime);
+    color: var(--lime) !important;
 }
 body.export-mode #addSpeedBtn:hover:not([disabled]):not(.dim) {
-    background: rgba(92, 255, 92, 0.12);
+    background: #3d1670 !important;
 }
 
 /* Inline speed-queue tags shown next to the Export button. */
