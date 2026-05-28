@@ -294,9 +294,19 @@ body.export-mode .speed-wrap label { color: var(--lime); }
 
 /* Inline speed-queue tags shown next to the Export button. */
 body.export-mode #addSpeedBtn,
-body.export-mode #exportSpeedTags {
+body.export-mode #exportSpeedTags,
+body.export-mode #exportFrameStampRow {
     display: inline-flex !important;
     align-items: center;
+}
+/* A speed-tag group is the pill PLUS the print checkbox sitting
+   next to (but visually outside) it.  Each group represents one
+   queued export speed. */
+.speed-tag-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 4px;
 }
 .speed-tag {
     display: inline-flex;
@@ -307,25 +317,11 @@ body.export-mode #exportSpeedTags {
     background: rgba(166, 222, 27, 0.12);
     border: 1px solid var(--lime);
     border-radius: 10px;
-    padding: 1px 6px 1px 8px;
+    padding: 1px 4px 1px 8px;
     white-space: nowrap;
 }
 .speed-tag .tag-rate { font-weight: 600; }
-.speed-tag label {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    cursor: pointer;
-    user-select: none;
-    color: var(--lime);
-    margin-left: 2px;
-}
-.speed-tag label input[type="checkbox"] {
-    margin: 0;
-    accent-color: var(--lime);
-}
 .speed-tag .tag-remove {
-    margin-left: 2px;
     cursor: pointer;
     background: none;
     border: none;
@@ -335,6 +331,20 @@ body.export-mode #exportSpeedTags {
     padding: 0 2px;
 }
 .speed-tag .tag-remove:hover { color: #fff; background: var(--lime); border-radius: 2px; }
+.speed-tag-group .tag-print {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+.speed-tag-group .tag-print input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--lime);
+}
+.speed-tag-group .tag-print:has(input:checked) { color: var(--lime); font-weight: 600; }
 #addSpeedBtn[disabled],
 #addSpeedBtn.dim {
     opacity: 0.45;

@@ -65,6 +65,17 @@
                         style="display:none;">Add speed</button>
                 <span id="exportSpeedTags"
                       style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);"></span>
+                <span id="exportFrameStampRow"
+                      style="display:none;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);margin-left:6px;">
+                    <label title="Burn the source-video frame number into every exported frame (top-right corner)"
+                           style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;">
+                        <input type="checkbox" id="stampFrameNumber" style="margin:0;"> Frame #
+                    </label>
+                    <label title="Burn the elapsed seconds-since-start-of-export into every exported frame (bottom-right corner)"
+                           style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;">
+                        <input type="checkbox" id="stampTime" style="margin:0;"> Time
+                    </label>
+                </span>
                 <span id="exportStatus"></span>
 
                 <div class="spacer"></div>
@@ -85,6 +96,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=31"></script>
+    <script src="/static/js/viewer.js?v=32"></script>
 </body>
 </html>

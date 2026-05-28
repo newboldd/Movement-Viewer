@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -100,44 +100,76 @@ async def upload_frames(export_id: str, request: Request) -> dict:
     return {"received": count, "total_received": meta["frames_received"]}
 
 
-class EncodeSpeed(BaseModel):
-    speed: float
-    badge: bool = False
+def _esc(text: str) -> str:
+    """Escape drawtext metacharacters."""
+    return (text.replace("\\", "\\\\")
+                .replace(":", "\\:")
+                .replace("'", r"\\'"))
 
 
-class EncodeRequest(BaseModel):
-    # Either a list of floats (legacy) or a list of {speed, badge}
-    # objects.  Default [1.0] preserves the original behaviour.
-    speeds: list[EncodeSpeed | float] | None = None
+def _vf_for(badge_text: str | None,
+            show_frame_num: bool,
+            show_time: bool,
+            start_frame_idx: int,
+            source_fps: float,
+            output_speed: float) -> str:
+    """Build the ``-vf`` filter chain.
 
+    - Always pads odd dimensions.
+    - ``badge_text`` (e.g. ``'0.5x'``) → big white box in the top-left.
+    - ``show_frame_num`` → small label in the top-right showing the
+      source-video frame index that this output frame came from.
+    - ``show_time`` → small label in the bottom-right showing the
+      *source* elapsed seconds since the start of the exported range.
 
-def _vf_for(badge_text: str | None) -> str:
-    """Build the ``-vf`` filter chain.  Always pads odd dimensions; if
-    ``badge_text`` is set, additionally burns a 'Nx' label into the
-    top-left corner of the frame."""
+    For the frame# and time labels we use the JPEG sequence's frame
+    counter (``%{n}``, 0-based) — that's the index into the captured
+    range.  The source frame number is ``start_frame_idx + n`` and
+    the source elapsed time is ``n / source_fps`` regardless of
+    output speed (so a 0.05× slowmo still shows real-world time).
+    """
     vf = "pad=ceil(iw/2)*2:ceil(ih/2)*2"
     if badge_text:
-        # Escape ffmpeg drawtext metacharacters.
-        safe = (badge_text.replace("\\", "\\\\")
-                            .replace(":", "\\:")
-                            .replace("'", r"\\'"))
-        vf += (",drawtext=text='" + safe + "'"
+        vf += (",drawtext=text='" + _esc(badge_text) + "'"
                ":fontcolor=0x2d0f5a"
                ":fontsize=h/12"
                ":box=1:boxcolor=white@1"
                ":boxborderw=10"
                ":x=12:y=12")
+    if show_frame_num:
+        # Source frame number = input frame counter (0-based) + the
+        # capture start offset.  %{eif:expr:d} formats expr as int.
+        expr = f"%{{eif\\:n+{int(start_frame_idx)}\\:d}}"
+        vf += (",drawtext=text='f=" + expr + "'"
+               ":fontcolor=white"
+               ":fontsize=h/28"
+               ":box=1:boxcolor=black@0.55"
+               ":boxborderw=4"
+               ":x=w-text_w-10:y=10")
+    if show_time:
+        # Elapsed seconds in the OUTPUT playback timeline (so a 0.05x
+        # slowmo's clock ticks slowly), formatted HH:MM:SS.mmm.
+        vf += (",drawtext=text='%{pts\\:hms}'"
+               ":fontcolor=white"
+               ":fontsize=h/28"
+               ":box=1:boxcolor=black@0.55"
+               ":boxborderw=4"
+               ":x=w-text_w-10:y=h-text_h-10")
     return vf
 
 
 def _encode_one(ffmpeg: str, tmp_dir: str, out_fps: float, out_path: str,
-                 threads: int, badge_text: str | None) -> tuple[str, subprocess.CompletedProcess]:
-    """Encode one MP4 at the given output framerate.  Returns (path, result)."""
+                 threads: int, badge_text: str | None,
+                 show_frame_num: bool, show_time: bool,
+                 source_fps: float, output_speed: float,
+                 start_frame_idx: int) -> tuple[str, subprocess.CompletedProcess]:
+    """Encode one MP4 at the given output framerate."""
     cmd = [
         ffmpeg, "-y",
         "-framerate", str(out_fps),
         "-i", os.path.join(tmp_dir, "frame_%06d.jpg"),
-        "-vf", _vf_for(badge_text),
+        "-vf", _vf_for(badge_text, show_frame_num, show_time,
+                        start_frame_idx, source_fps, output_speed),
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         # Cap per-process threads so N parallel encodes don't oversubscribe
         # CPU.  ``threads=0`` lets libx264 pick automatically.
@@ -156,8 +188,16 @@ def _speed_tag(speed: float) -> str:
 
 
 @router.post("/{export_id}/encode")
-def encode_export(export_id: str, body: EncodeRequest | None = None):
+def encode_export(export_id: str, body: dict = Body(default_factory=dict)):
     """Encode uploaded frames to one or more MP4s at the requested speeds.
+
+    Body schema (all optional):
+        {
+          "speeds": [{"speed": 1.0, "badge": false}, ...]    // or list[float]
+          "show_frame_num": false,
+          "show_time": false,
+          "start_frame_idx": 0     // first source frame index in the capture
+        }
 
     Returns JSON describing the produced files; client then fetches each
     file via ``GET /{export_id}/file/{name}`` and finally ``DELETE``s
@@ -168,7 +208,7 @@ def encode_export(export_id: str, body: EncodeRequest | None = None):
         raise HTTPException(404, "Export session not found")
 
     tmp_dir = meta["tmp_dir"]
-    source_fps = meta["fps"]
+    source_fps = float(meta["fps"])
     frame_files = sorted(Path(tmp_dir).glob("frame_*.jpg"))
     if not frame_files:
         raise HTTPException(400, "No frames uploaded")
@@ -178,13 +218,23 @@ def encode_export(export_id: str, body: EncodeRequest | None = None):
     except FileNotFoundError as exc:
         raise HTTPException(500, str(exc))
 
-    raw_speeds = (body.speeds if body and body.speeds else [1.0])
-    # Accept either bare floats (legacy) or {speed, badge} objects.
+    raw_speeds = body.get("speeds") if isinstance(body, dict) else None
+    if not raw_speeds:
+        raw_speeds = [1.0]
+    show_frame_num = bool(body.get("show_frame_num", False))
+    show_time = bool(body.get("show_time", False))
+    start_frame_idx = int(body.get("start_frame_idx", 0) or 0)
+
+    # Accept either bare floats (legacy) or {speed, badge} dicts.
     seen = set()
     clean: list[tuple[float, bool]] = []
     for s in raw_speeds:
-        if isinstance(s, EncodeSpeed):
-            sv, bd = s.speed, bool(s.badge)
+        if isinstance(s, dict):
+            try:
+                sv = float(s.get("speed"))
+            except (TypeError, ValueError):
+                continue
+            bd = bool(s.get("badge", False))
         else:
             try:
                 sv = float(s)
@@ -207,7 +257,7 @@ def encode_export(export_id: str, body: EncodeRequest | None = None):
 
     jobs = []
     for sp, badge in clean:
-        out_fps = float(source_fps) * sp
+        out_fps = source_fps * sp
         out_path = os.path.join(tmp_dir, f"export_{_speed_tag(sp)}.mp4")
         badge_text = f"{sp:g}x" if badge else None
         jobs.append((sp, out_fps, out_path, badge_text))
@@ -216,7 +266,8 @@ def encode_export(export_id: str, body: EncodeRequest | None = None):
     errors: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as ex:
         futs = {
-            ex.submit(_encode_one, ffmpeg, tmp_dir, of, op, per_threads, bt): sp
+            ex.submit(_encode_one, ffmpeg, tmp_dir, of, op, per_threads, bt,
+                      show_frame_num, show_time, source_fps, sp, start_frame_idx): sp
             for sp, of, op, bt in jobs
         }
         for fut in concurrent.futures.as_completed(futs):

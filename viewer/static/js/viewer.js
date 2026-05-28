@@ -1071,34 +1071,28 @@
                 ${GREY} ${bP}%, ${GREY} 100%)`;
     }
 
-    /** Re-render the row of speed-tag pills shown next to the Export
-     *  button in export mode.  Tags carry: the speed, a "print"
-     *  checkbox that bakes a "Nx" badge into THAT speed's output, and
-     *  an × to remove the tag.  Re-renders from ``exportSpeedQueue``. */
+    /** Re-render the row of queued-speed pills.  Each queued speed
+     *  becomes a {pill ×}{print} pair: the pill itself shows just
+     *  ``Nx`` and a remove ×, with a small ``print`` checkbox sitting
+     *  inline beside it (outside the pill border) that toggles the
+     *  burned-in 'Nx' badge for THAT speed's output.  Removing the
+     *  pill also removes the print checkbox in the same DOM group. */
     function _renderSpeedTags() {
         const row = $('exportSpeedTags');
         if (!row) return;
         row.innerHTML = '';
         for (let i = 0; i < exportSpeedQueue.length; i++) {
             const entry = exportSpeedQueue[i];
+            const group = document.createElement('span');
+            group.className = 'speed-tag-group';
+            group.dataset.idx = String(i);
+
             const tag = document.createElement('span');
             tag.className = 'speed-tag';
-            tag.dataset.idx = String(i);
             const rate = document.createElement('span');
             rate.className = 'tag-rate';
             rate.textContent = `${entry.speed}x`;
             tag.appendChild(rate);
-            const printLbl = document.createElement('label');
-            printLbl.title = 'Burn a "Nx" badge into the top-left of this output';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = !!entry.badge;
-            cb.addEventListener('change', () => {
-                entry.badge = cb.checked;
-            });
-            printLbl.appendChild(cb);
-            printLbl.appendChild(document.createTextNode('print'));
-            tag.appendChild(printLbl);
             const rm = document.createElement('button');
             rm.className = 'tag-remove';
             rm.type = 'button';
@@ -1110,7 +1104,25 @@
                 _updateAddSpeedBtn();
             });
             tag.appendChild(rm);
-            row.appendChild(tag);
+            group.appendChild(tag);
+
+            const printLbl = document.createElement('label');
+            printLbl.className = 'tag-print';
+            printLbl.title = `Burn a "${entry.speed}x" label into the top-left of this output`;
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = !!entry.badge;
+            cb.addEventListener('change', () => {
+                entry.badge = cb.checked;
+                // Re-render so the checked label picks up the lime
+                // active style without us having to track it.
+                _renderSpeedTags();
+            });
+            printLbl.appendChild(cb);
+            printLbl.appendChild(document.createTextNode('print'));
+            group.appendChild(printLbl);
+
+            row.appendChild(group);
         }
     }
 
@@ -1172,6 +1184,7 @@
         $('addSpeedBtn').style.display = 'none';
         $('exportSpeedTags').style.display = 'none';
         $('exportSpeedTags').innerHTML = '';
+        $('exportFrameStampRow').style.display = 'none';
         cropDragMode = null;
         cropDragStart = null;
         canvas.style.cursor = '';
@@ -1423,11 +1436,16 @@
             status.textContent = speeds.length > 1
                 ? `Encoding ${speeds.length} speeds in parallel…`
                 : 'Encoding…';
+            const stampFrame = !!$('stampFrameNumber')?.checked;
+            const stampSecs  = !!$('stampTime')?.checked;
             const encResp = await fetch(`/api/export-video/${exportId}/encode`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     speeds: queue.map(q => ({ speed: q.speed, badge: !!q.badge })),
+                    show_frame_num: stampFrame,
+                    show_time: stampSecs,
+                    start_frame_idx: startFrame,
                 }),
                 signal: exportAbort.signal,
             });
