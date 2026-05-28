@@ -5,7 +5,9 @@ endpoints actually used by the standalone viewer's in-page export flow.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -15,7 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -98,53 +100,142 @@ async def upload_frames(export_id: str, request: Request) -> dict:
     return {"received": count, "total_received": meta["frames_received"]}
 
 
+class EncodeRequest(BaseModel):
+    # Optional list of speeds; default = [1.0] preserves the original
+    # single-speed behaviour.  Each speed produces one MP4 at
+    # ``source_fps * speed`` frames per second.
+    speeds: list[float] | None = None
+
+
+def _encode_one(ffmpeg: str, tmp_dir: str, out_fps: float, out_path: str,
+                 threads: int) -> tuple[str, subprocess.CompletedProcess]:
+    """Encode one MP4 at the given output framerate.  Returns (path, result)."""
+    cmd = [
+        ffmpeg, "-y",
+        "-framerate", str(out_fps),
+        "-i", os.path.join(tmp_dir, "frame_%06d.jpg"),
+        "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        # Cap per-process threads so N parallel encodes don't oversubscribe
+        # CPU.  ``threads=0`` lets libx264 pick automatically.
+        "-threads", str(threads),
+        "-pix_fmt", "yuv420p",
+        out_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    return out_path, result
+
+
+def _speed_tag(speed: float) -> str:
+    """File-safe tag used in output filenames, e.g. 0.05 → '0p05x'."""
+    s = f"{speed:g}".replace(".", "p")
+    return f"{s}x"
+
+
 @router.post("/{export_id}/encode")
-def encode_export(export_id: str, background_tasks: BackgroundTasks):
-    """Encode uploaded frames to MP4 and return the file for download."""
+def encode_export(export_id: str, body: EncodeRequest | None = None):
+    """Encode uploaded frames to one or more MP4s at the requested speeds.
+
+    Returns JSON describing the produced files; client then fetches each
+    file via ``GET /{export_id}/file/{name}`` and finally ``DELETE``s
+    the session to clean up.
+    """
     meta = _active_exports.get(export_id)
     if not meta:
         raise HTTPException(404, "Export session not found")
 
     tmp_dir = meta["tmp_dir"]
-    fps = meta["fps"]
+    source_fps = meta["fps"]
     frame_files = sorted(Path(tmp_dir).glob("frame_*.jpg"))
     if not frame_files:
         raise HTTPException(400, "No frames uploaded")
-
-    output_path = os.path.join(tmp_dir, "export.mp4")
 
     try:
         ffmpeg = get_ffmpeg_path()
     except FileNotFoundError as exc:
         raise HTTPException(500, str(exc))
 
-    cmd = [
-        ffmpeg, "-y",
-        "-framerate", str(fps),
-        "-i", os.path.join(tmp_dir, "frame_%06d.jpg"),
-        "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        output_path,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    if result.returncode != 0:
-        tail = result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr
-        logger.error("ffmpeg encode failed:\n%s", tail)
-        raise HTTPException(500, f"ffmpeg encode failed: {tail[:500]}")
-    if not os.path.exists(output_path):
-        raise HTTPException(500, "Encoding produced no output file")
+    speeds = (body.speeds if body and body.speeds else [1.0])
+    # Dedup + clip pathological values, preserve client-given order.
+    seen = set()
+    clean_speeds: list[float] = []
+    for s in speeds:
+        try:
+            sv = float(s)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(sv) or sv <= 0:
+            continue
+        if sv in seen:
+            continue
+        seen.add(sv)
+        clean_speeds.append(sv)
+    if not clean_speeds:
+        clean_speeds = [1.0]
 
-    logger.info("Export %s: encoded %d frames → %.1f MB",
-                export_id, len(frame_files),
-                os.path.getsize(output_path) / 1024 / 1024)
+    # Pick a per-process thread count that gives each encode roughly an
+    # equal share of cores, without oversubscribing.  Minimum of 1.
+    n_cores = max(1, (os.cpu_count() or 4))
+    per_threads = max(1, n_cores // max(1, len(clean_speeds)))
 
-    def cleanup() -> None:
+    jobs = []
+    for sp in clean_speeds:
+        out_fps = float(source_fps) * sp
+        out_path = os.path.join(tmp_dir, f"export_{_speed_tag(sp)}.mp4")
+        jobs.append((sp, out_fps, out_path))
+
+    files_out: list[dict] = []
+    errors: list[str] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as ex:
+        futs = {
+            ex.submit(_encode_one, ffmpeg, tmp_dir, of, op, per_threads): sp
+            for sp, of, op in jobs
+        }
+        for fut in concurrent.futures.as_completed(futs):
+            sp = futs[fut]
+            try:
+                path, result = fut.result()
+            except Exception as e:
+                errors.append(f"{sp}x: {e}")
+                continue
+            if result.returncode != 0:
+                tail = result.stderr[-500:] if result.stderr else ""
+                errors.append(f"{sp}x: ffmpeg rc={result.returncode}: {tail}")
+                continue
+            if not os.path.exists(path):
+                errors.append(f"{sp}x: no output file produced")
+                continue
+            files_out.append({
+                "speed": sp,
+                "name": os.path.basename(path),
+                "size": os.path.getsize(path),
+            })
+
+    if errors and not files_out:
+        # Every encode failed → session is unusable; tear down.
         _active_exports.pop(export_id, None)
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(500, "ffmpeg encode failed: " + "; ".join(errors))
 
-    background_tasks.add_task(cleanup)
-    return FileResponse(output_path, media_type="video/mp4", filename="export.mp4")
+    files_out.sort(key=lambda f: f["speed"])
+    logger.info("Export %s: encoded %d speed(s) (%d frames each)",
+                export_id, len(files_out), len(frame_files))
+    return {"files": files_out, "errors": errors}
+
+
+@router.get("/{export_id}/file/{name}")
+def download_file(export_id: str, name: str):
+    """Stream one of the produced MP4s.  Cleanup happens on DELETE."""
+    meta = _active_exports.get(export_id)
+    if not meta:
+        raise HTTPException(404, "Export session not found")
+    # Reject path traversal — the filename must be one we wrote.
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(400, "Bad filename")
+    path = os.path.join(meta["tmp_dir"], name)
+    if not os.path.isfile(path):
+        raise HTTPException(404, "File not found")
+    return FileResponse(path, media_type="video/mp4", filename=name)
 
 
 @router.delete("/{export_id}")

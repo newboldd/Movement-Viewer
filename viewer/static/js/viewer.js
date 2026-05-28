@@ -10,6 +10,14 @@
 
     const SPEED_PRESETS = [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 30, 60, 120];
     const SPEED_DEFAULT_IDX = SPEED_PRESETS.indexOf(1);
+    // Maximum number of speeds the user can select for a single export.
+    // Bound by CPU cores in practice — past 4 the parallel encodes start
+    // contending and savings vanish.
+    const MAX_EXPORT_SPEEDS = 4;
+    // Which speeds the user has ticked for the next export.  Starts on
+    // 1x; updated whenever the speed slider moves so the obvious
+    // playback speed is always pre-selected.
+    let selectedExportSpeeds = new Set([1]);
 
     // Transport-glyph rendering differs by OS: Windows draws unicode ←/→
     // as hairlines and ▮▮ as chunky blocks.  Use SVG icons on Windows so
@@ -997,10 +1005,15 @@
      *  so it ends up inside the captured frame during export. */
     function _drawSpeedBadge() {
         if (!showSpeedBadge || !exportMode) return;
-        if (playbackRate === 1) return;
         if (!(cropW > 0) || !(cropH > 0)) return;
+        // The badge only makes sense when one (non-1x) speed is being
+        // exported — _updateSpeedBadgeUI hides the checkbox otherwise.
+        const speeds = [...selectedExportSpeeds];
+        if (speeds.length !== 1) return;
+        const speedVal = speeds[0];
+        if (speedVal === 1) return;
 
-        const text = `${playbackRate}x`;
+        const text = `${speedVal}x`;
         const fontSize = Math.max(28, Math.min(96, Math.round(cropH * 0.10)));
         ctx.save();
         ctx.font = `800 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -1090,21 +1103,77 @@
                 ${GREY} ${bP}%, ${GREY} 100%)`;
     }
 
-    /** Show/hide the "Show #x" checkbox and refresh its label. */
+    /** Show/hide the "Show #x" checkbox and refresh its label.  Only
+     *  meaningful when exactly one non-1x speed is selected — with
+     *  multiple speeds we can't bake a single badge into the captured
+     *  frames, so the option is disabled. */
     function _updateSpeedBadgeUI() {
         const label = $('speedBadgeLabel');
         const cb    = $('speedBadgeCheckbox');
         const txt   = $('speedBadgeLabelText');
         if (!label || !cb || !txt) return;
-        const show = exportMode && playbackRate !== 1;
+        const speeds = [...selectedExportSpeeds];
+        const onlyOne = speeds.length === 1;
+        const single  = onlyOne ? speeds[0] : null;
+        const show = exportMode && onlyOne && single !== 1;
         label.style.display = show ? 'inline-flex' : 'none';
         if (show) {
-            txt.textContent = `${playbackRate}x`;
+            txt.textContent = `${single}x`;
         } else {
-            // Hidden checkbox shouldn't leak a stale badge into the view.
             cb.checked = false;
             showSpeedBadge = false;
         }
+    }
+
+    /** Populate the inline "Export speeds" checkbox row.  Called once
+     *  on entering export mode; checkbox state lives in
+     *  ``selectedExportSpeeds`` so re-entering preserves it. */
+    function _buildExportSpeedCheckboxes() {
+        const row = $('exportSpeedsRow');
+        if (!row) return;
+        // Wipe any previously-built checkboxes (keep the leading label).
+        row.querySelectorAll('label.speed-cb').forEach(n => n.remove());
+        for (const sp of SPEED_PRESETS) {
+            const lbl = document.createElement('label');
+            lbl.className = 'speed-cb';
+            lbl.title = `Encode an MP4 at ${sp}x`;
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.speed = String(sp);
+            cb.checked = selectedExportSpeeds.has(sp);
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    if (selectedExportSpeeds.size >= MAX_EXPORT_SPEEDS) {
+                        cb.checked = false;
+                        return;
+                    }
+                    selectedExportSpeeds.add(sp);
+                } else {
+                    selectedExportSpeeds.delete(sp);
+                }
+                _refreshExportSpeedCheckboxes();
+                _updateSpeedBadgeUI();
+            });
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(`${sp}x`));
+            row.appendChild(lbl);
+        }
+        _refreshExportSpeedCheckboxes();
+    }
+
+    /** Disable the unchecked checkboxes when we've hit the cap so the
+     *  cap is visually obvious instead of silently rejected on click. */
+    function _refreshExportSpeedCheckboxes() {
+        const row = $('exportSpeedsRow');
+        if (!row) return;
+        const atCap = selectedExportSpeeds.size >= MAX_EXPORT_SPEEDS;
+        row.querySelectorAll('label.speed-cb').forEach(lbl => {
+            const cb = lbl.querySelector('input[type="checkbox"]');
+            if (!cb) return;
+            const isChecked = cb.checked;
+            cb.disabled = atCap && !isChecked;
+            lbl.classList.toggle('disabled', cb.disabled);
+        });
     }
 
     function enterExportMode() {
@@ -1127,6 +1196,13 @@
         btn.classList.add('btn-primary');
         $('exportCancelBtn').style.display = '';
         $('exportStatus').textContent = '';
+        // Default-select the current playback speed if nothing's ticked
+        // (or only a stale entry from a prior export).
+        if (selectedExportSpeeds.size === 0 ||
+            (selectedExportSpeeds.size === 1 && !SPEED_PRESETS.includes([...selectedExportSpeeds][0]))) {
+            selectedExportSpeeds = new Set([playbackRate]);
+        }
+        _buildExportSpeedCheckboxes();
         _updateSpeedBadgeUI();
         _resetCropToView();
         render();
@@ -1143,6 +1219,8 @@
         btn.disabled = false;
         $('exportCancelBtn').style.display = 'none';
         $('exportStatus').textContent = '';
+        const row = $('exportSpeedsRow');
+        if (row) row.querySelectorAll('label.speed-cb').forEach(n => n.remove());
         _updateSpeedBadgeUI();          // hides the label, clears the flag
         cropDragMode = null;
         cropDragStart = null;
@@ -1207,9 +1285,21 @@
         if (endFrame <= startFrame) { alert('Trim range is empty'); return; }
         const totalFrames = endFrame - startFrame + 1;
 
-        // Prompt for the save destination FIRST — while the user
-        // activation from the Export click is still valid.  If the
-        // user cancels we never touch the server.
+        // Selected output speeds, sorted ascending so the resulting
+        // files line up with the checkbox row visually.
+        const speeds = [...selectedExportSpeeds].sort((a, b) => a - b);
+        if (speeds.length === 0) {
+            alert('Pick at least one export speed.');
+            return;
+        }
+        if (speeds.length > MAX_EXPORT_SPEEDS) {
+            alert(`At most ${MAX_EXPORT_SPEEDS} speeds at a time.`);
+            return;
+        }
+
+        // Prompt for save destinations FIRST — one per speed, all
+        // chained off the single Export click's user activation.  If
+        // the user cancels any picker we never touch the server.
         if (!window.showSaveFilePicker) {
             alert('Saving the export needs Chrome or Edge (File System Access API).');
             return;
@@ -1217,26 +1307,34 @@
         const stem = (currentLoaded && currentLoaded.name)
             ? currentLoaded.name.replace(/\.\w+$/, '')
             : 'export';
-        // Tags: camera (stereo only), "_Crop" iff the crop is not the
-        // full source half/frame, and "_{rate}x" iff rate ≠ 1.
         const camTag   = isStereo ? `_${currentSide}` : '';
         const cropTag  = _cropIsFullSource() ? '' : '_crop';
-        const speedTag = (playbackRate === 1) ? '' : `_${playbackRate}x`;
-        // Trim tag: included only when the trim range isn't the whole
-        // video (first to last frame).
         const isFullRange = (startFrame === 0 && endFrame === nFrames - 1);
         const trimTag  = isFullRange ? '' : `_trim${startFrame}-${endFrame}`;
-        let saveHandle = null;
+        const speedTag = (sp) => (sp === 1) ? '' : `_${sp}x`;
+
+        const saveHandles = [];  // parallel to `speeds`
         try {
-            saveHandle = await window.showSaveFilePicker({
-                suggestedName: `${stem}${camTag}${cropTag}${speedTag}${trimTag}.mp4`,
-                types: [{
-                    description: 'MP4 video',
-                    accept: { 'video/mp4': ['.mp4'] },
-                }],
-            });
+            for (const sp of speeds) {
+                const name = `${stem}${camTag}${cropTag}${speedTag(sp)}${trimTag}.mp4`;
+                const h = await window.showSaveFilePicker({
+                    suggestedName: name,
+                    types: [{ description: 'MP4 video',
+                              accept: { 'video/mp4': ['.mp4'] } }],
+                });
+                saveHandles.push(h);
+            }
         } catch (err) {
-            if (err && err.name === 'AbortError') return;     // user cancelled
+            if (err && err.name === 'AbortError') {
+                // User cancelled mid-picker — drop any handles already
+                // created so we don't leave zero-byte files behind.
+                for (const h of saveHandles) {
+                    if (h && typeof h.remove === 'function') {
+                        try { await h.remove(); } catch (_) {}
+                    }
+                }
+                return;
+            }
             alert('Could not open save dialog: ' + err.message);
             return;
         }
@@ -1263,15 +1361,17 @@
         if (ch % 2) ch -= 1;
 
         let exportId = null;
+        let handlesToCleanup = [...saveHandles];
         try {
-            const outFps = fps * (playbackRate || 1);
-
             _checkAbort();
             const startResp = await fetch('/api/export-video/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                // Send the SOURCE fps; the server multiplies by each
+                // requested speed at encode time so frames are captured
+                // and uploaded exactly once regardless of speed count.
                 body: JSON.stringify({
-                    fps: outFps, width: cw, height: ch, total_frames: totalFrames,
+                    fps: fps, width: cw, height: ch, total_frames: totalFrames,
                 }),
                 signal: exportAbort.signal,
             });
@@ -1309,39 +1409,65 @@
             }
 
             _checkAbort();
-            status.textContent = 'Encoding…';
+            status.textContent = speeds.length > 1
+                ? `Encoding ${speeds.length} speeds in parallel…`
+                : 'Encoding…';
             const encResp = await fetch(`/api/export-video/${exportId}/encode`, {
-                method: 'POST', signal: exportAbort.signal,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speeds }),
+                signal: exportAbort.signal,
             });
             if (!encResp.ok) throw new Error('encoding failed');
-            const mp4Blob = await encResp.blob();
-            // Write straight to the file the user picked — no blob URL,
-            // no download link, no in-memory copy past this point.
-            status.textContent = 'Saving…';
-            _checkAbort();
-            const writable = await saveHandle.createWritable();
-            await writable.write(mp4Blob);
-            await writable.close();
-            status.textContent = `Saved to ${saveHandle.name}.`;
-            saveHandle = null;          // committed → don't delete on cleanup
+            const encInfo = await encResp.json();
+            const files = encInfo.files || [];
+            if (!files.length) throw new Error('encoder produced no files');
+
+            // Map speed → produced file name so we can pair them with
+            // the user-picked save handles (which are also in
+            // ascending-speed order).
+            const fileBySpeed = new Map(files.map(f => [f.speed, f.name]));
+            for (let i = 0; i < speeds.length; i++) {
+                _checkAbort();
+                const sp = speeds[i];
+                const name = fileBySpeed.get(sp);
+                if (!name) throw new Error(`server didn't return file for ${sp}x`);
+                status.textContent = `Saving ${i + 1} / ${speeds.length} (${sp}x)…`;
+                const dlResp = await fetch(
+                    `/api/export-video/${exportId}/file/${encodeURIComponent(name)}`,
+                    { signal: exportAbort.signal });
+                if (!dlResp.ok) throw new Error(`download failed for ${sp}x`);
+                const blob = await dlResp.blob();
+                const writable = await saveHandles[i].createWritable();
+                await writable.write(blob);
+                await writable.close();
+                handlesToCleanup[i] = null;        // committed
+            }
+            status.textContent = (speeds.length === 1)
+                ? `Saved to ${saveHandles[0].name}.`
+                : `Saved ${speeds.length} files.`;
+            // Server cleanup — encode endpoint leaves files until we
+            // DELETE so the client can fetch them; do that now.
+            fetch(`/api/export-video/${exportId}`, { method: 'DELETE' }).catch(() => {});
             exportId = null;
         } catch (err) {
             if (err && err.name === 'AbortError') {
                 status.textContent = 'Cancelled.';
-                if (exportId) {
-                    fetch(`/api/export-video/${exportId}`, { method: 'DELETE' }).catch(() => {});
-                }
             } else {
                 console.error(err);
                 status.textContent = 'Error: ' + err.message;
             }
-            // Either way, an incomplete (possibly zero-byte) file may
-            // exist at the chosen path because showSaveFilePicker
-            // creates it on dialog confirmation.  Best-effort remove.
-            if (saveHandle && typeof saveHandle.remove === 'function') {
-                try { await saveHandle.remove(); } catch (_) {}
+            if (exportId) {
+                fetch(`/api/export-video/${exportId}`, { method: 'DELETE' }).catch(() => {});
             }
-            saveHandle = null;
+            // Any save handle whose file we never wrote may exist as a
+            // zero-byte stub (showSaveFilePicker creates it on
+            // confirmation).  Best-effort remove.
+            for (const h of handlesToCleanup) {
+                if (h && typeof h.remove === 'function') {
+                    try { await h.remove(); } catch (_) {}
+                }
+            }
         } finally {
             exportRunning = false;
             exportAbort = null;

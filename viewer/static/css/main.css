@@ -287,10 +287,35 @@ body.export-mode #timelineSlider::-moz-range-thumb {
     pointer-events: none;
 }
 
-/* Export-mode tints */
-body.export-mode #speedSlider { accent-color: var(--lime); }
-body.export-mode #speedDisplay,
-body.export-mode .speed-wrap label { color: var(--lime); }
+/* Export-mode tints.  The speed slider stays in its normal colour
+   because output speed is now selected via the inline checkboxes
+   below — not the live-playback slider. */
+body.export-mode #exportSpeedsRow {
+    display: inline-flex !important;
+}
+#exportSpeedsRow label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 1px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+}
+#exportSpeedsRow input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--lime);
+}
+#exportSpeedsRow label:has(input:checked) {
+    color: var(--lime);
+    font-weight: 600;
+}
+#exportSpeedsRow label.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
 body.export-mode #exportBtn {
     background: var(--violet-bright);
     color: #fff;

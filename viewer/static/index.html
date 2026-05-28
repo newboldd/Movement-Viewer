@@ -60,8 +60,13 @@
 
                 <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
                 <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
+                <span id="exportSpeedsRow"
+                      title="Pick one or more output speeds.  Frames are captured once and each speed is encoded in parallel.  Max 4."
+                      style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);">
+                    <span>Export speeds:</span>
+                </span>
                 <label id="speedBadgeLabel"
-                       title="Burn a large speed badge into the top-left of the exported video"
+                       title="Burn a large speed badge into the top-left of the exported video.  Disabled when more than one speed is selected."
                        style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
                     <input type="checkbox" id="speedBadgeCheckbox" style="margin:0;">
                     Show <span id="speedBadgeLabelText">1x</span>
@@ -86,6 +91,6 @@
 
     </div>
 
-    <script src="/static/js/viewer.js?v=29"></script>
+    <script src="/static/js/viewer.js?v=30"></script>
 </body>
 </html>
