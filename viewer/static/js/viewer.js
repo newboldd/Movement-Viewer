@@ -389,31 +389,92 @@
         _autoLoadMostRecent();
     }
 
-    /** Try to silently open the most-recently-used video on launch.
-     *  Only proceeds when the saved FileSystemFileHandle still has
-     *  ``granted`` read permission for the current origin — anything
-     *  else would require a user gesture for ``requestPermission``,
-     *  which doesn't exist mid-pageload.  No-ops on first-ever launch,
-     *  on files that were re-opened by picker (no handle), or after
-     *  permissions were revoked. */
+    /** Try to load the most-recently-used video on launch.  If
+     *  ``queryPermission`` already reports ``granted`` the file is
+     *  opened silently; otherwise we attempt ``requestPermission``,
+     *  and if that throws (no user gesture on pageload) we surface a
+     *  one-click "Resume <name>" banner that retries inside the
+     *  click's user-activation window. */
     async function _autoLoadMostRecent() {
         try {
             const recs = await RecentVideos.list();
             if (!recs.length) return;
             const rec = recs[0];
             const h = rec && rec.handle;
-            if (!h || typeof h.queryPermission !== 'function') return;
-            const perm = await h.queryPermission({ mode: 'read' });
-            if (perm !== 'granted') return;
-            const file = await h.getFile();
-            pendingRecent = {
-                name: rec.name, size: rec.size,
-                stereo: rec.stereo, handle: h,
+            if (!h) return;
+
+            const openWith = async (handle) => {
+                const file = await handle.getFile();
+                pendingRecent = {
+                    name: rec.name, size: rec.size,
+                    stereo: rec.stereo, handle: handle,
+                };
+                loadFile(file);
             };
-            loadFile(file);
+
+            let perm = 'prompt';
+            if (typeof h.queryPermission === 'function') {
+                try { perm = await h.queryPermission({ mode: 'read' }); } catch (_) {}
+            }
+            if (perm === 'granted') {
+                await openWith(h);
+                return;
+            }
+
+            // No grant yet.  Try requestPermission immediately — some
+            // browsers allow it during page load if the handle was
+            // recently used; others throw SecurityError because there's
+            // no transient user activation.
+            try {
+                if (typeof h.requestPermission === 'function') {
+                    const granted = await h.requestPermission({ mode: 'read' });
+                    if (granted === 'granted') {
+                        await openWith(h);
+                        return;
+                    }
+                }
+            } catch (_) { /* fall through to the click affordance */ }
+
+            // Fall back to a one-click banner so the next user gesture
+            // can re-request permission successfully.
+            _showResumeBanner(rec, openWith);
         } catch (err) {
             console.warn('Auto-load of most recent video failed:', err);
         }
+    }
+
+    /** Floating "Resume <name>" affordance for when auto-load needed
+     *  a permission re-grant that the browser refused without a user
+     *  gesture.  Clicking it requests permission inside the click's
+     *  activation window, then opens the file. */
+    function _showResumeBanner(rec, openWith) {
+        const existing = document.getElementById('resumeBanner');
+        if (existing) existing.remove();
+        const btn = document.createElement('button');
+        btn.id = 'resumeBanner';
+        btn.type = 'button';
+        btn.style.cssText = (
+            'position:fixed;top:10px;left:50%;transform:translateX(-50%);' +
+            'z-index:1000;padding:6px 12px;font-size:12px;' +
+            'background:var(--violet-bright);color:#fff;border:none;' +
+            'border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,0.35);' +
+            'cursor:pointer;'
+        );
+        btn.textContent = `Resume ${rec.name}`;
+        btn.addEventListener('click', async () => {
+            try {
+                const granted = await rec.handle.requestPermission({ mode: 'read' });
+                if (granted !== 'granted') return;
+                btn.remove();
+                await openWith(rec.handle);
+            } catch (err) {
+                console.warn('Resume failed:', err);
+                btn.textContent = 'Resume failed — pick from Recent list';
+            }
+        });
+        document.body.appendChild(btn);
+        // Auto-dismiss after 30s so it doesn't linger forever.
+        setTimeout(() => { try { btn.remove(); } catch (_) {} }, 30000);
     }
 
     // ── File loading ─────────────────────────────────────────
