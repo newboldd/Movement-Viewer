@@ -386,6 +386,34 @@
         sizeCanvas();
         render();
         _refreshRecentDropdown();
+        _autoLoadMostRecent();
+    }
+
+    /** Try to silently open the most-recently-used video on launch.
+     *  Only proceeds when the saved FileSystemFileHandle still has
+     *  ``granted`` read permission for the current origin — anything
+     *  else would require a user gesture for ``requestPermission``,
+     *  which doesn't exist mid-pageload.  No-ops on first-ever launch,
+     *  on files that were re-opened by picker (no handle), or after
+     *  permissions were revoked. */
+    async function _autoLoadMostRecent() {
+        try {
+            const recs = await RecentVideos.list();
+            if (!recs.length) return;
+            const rec = recs[0];
+            const h = rec && rec.handle;
+            if (!h || typeof h.queryPermission !== 'function') return;
+            const perm = await h.queryPermission({ mode: 'read' });
+            if (perm !== 'granted') return;
+            const file = await h.getFile();
+            pendingRecent = {
+                name: rec.name, size: rec.size,
+                stereo: rec.stereo, handle: h,
+            };
+            loadFile(file);
+        } catch (err) {
+            console.warn('Auto-load of most recent video failed:', err);
+        }
     }
 
     // ── File loading ─────────────────────────────────────────
