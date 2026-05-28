@@ -41,10 +41,6 @@
 
             <!-- Playback -->
             <div class="playback-row">
-                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
-                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
-                    <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
-                </label>
                 <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)" disabled>OS | OD</button>
                 <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)" disabled>Reset Zoom</button>
 
@@ -77,6 +73,11 @@
                 <span id="exportStatus"></span>
 
                 <div class="spacer"></div>
+
+                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
+                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
+                </label>
 
                 <div class="recent-picker" id="recentPicker">
                     <button class="btn btn-sm recent-toggle" id="recentToggleBtn"
