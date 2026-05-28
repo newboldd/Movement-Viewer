@@ -50,10 +50,8 @@
                     <span id="speedDisplay">1x</span>
                 </div>
 
-                <div class="divider"></div>
-
-                <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
-                <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
+                <!-- Export-time queue controls live next to the speed
+                     slider since they configure what gets encoded. -->
                 <button class="btn btn-sm" id="addSpeedBtn"
                         title="Queue the current speed for the next export.  Up to 4 speeds export from a single capture in parallel."
                         style="display:none;">Add speed</button>
@@ -74,10 +72,10 @@
 
                 <div class="spacer"></div>
 
-                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
-                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
-                    <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
-                </label>
+                <!-- Action cluster: Export buttons, then Recent videos,
+                     Stereo, and Load — all anchored to the right edge. -->
+                <button class="btn btn-sm" id="exportBtn" onclick="toggleExportMode()" disabled>Export Video</button>
+                <button class="btn btn-sm" id="exportCancelBtn" style="display:none;" onclick="exitExportMode()">Cancel</button>
 
                 <div class="recent-picker" id="recentPicker">
                     <button class="btn btn-sm recent-toggle" id="recentToggleBtn"
@@ -88,13 +86,18 @@
                     <div class="recent-panel" id="recentPanel" hidden></div>
                 </div>
 
-                <button class="btn btn-sm" id="browseBtn" title="Open any video file">Load Video</button>
+                <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
+                       style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
+                </label>
+
+                <button class="btn btn-sm" id="browseBtn" title="Open any video file">Load</button>
                 <input type="file" id="browseInput" accept="video/*" style="display:none;">
             </div>
         </div>
 
     </div>
 
-    <script src="/static/js/viewer.js?v=36"></script>
+    <script src="/static/js/viewer.js?v=37"></script>
 </body>
 </html>
