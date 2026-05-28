@@ -41,20 +41,18 @@
 
             <!-- Playback -->
             <div class="playback-row">
-                <div class="speed-wrap">
-                    <label>Speed</label>
-                    <input type="range" id="speedSlider" min="0" max="13" value="6" disabled>
-                    <span id="speedDisplay">1x</span>
-                </div>
-
-                <div class="divider"></div>
-
                 <label id="stereoLabel" title="Treat the loaded video as side-by-side stereo (auto-detected on load)"
                        style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);">
                     <input type="checkbox" id="stereoCheckbox" style="margin:0;" disabled> Stereo
                 </label>
                 <button class="btn btn-sm" id="sideToggle"  title="Switch camera (E)" disabled>OS | OD</button>
                 <button class="btn btn-sm" id="resetZoomBtn" title="Reset zoom (Z)" disabled>Reset Zoom</button>
+
+                <div class="speed-wrap">
+                    <label>Speed</label>
+                    <input type="range" id="speedSlider" min="0" max="13" value="6" disabled>
+                    <span id="speedDisplay">1x</span>
+                </div>
 
                 <div class="divider"></div>
 
