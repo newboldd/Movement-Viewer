@@ -100,21 +100,44 @@ async def upload_frames(export_id: str, request: Request) -> dict:
     return {"received": count, "total_received": meta["frames_received"]}
 
 
+class EncodeSpeed(BaseModel):
+    speed: float
+    badge: bool = False
+
+
 class EncodeRequest(BaseModel):
-    # Optional list of speeds; default = [1.0] preserves the original
-    # single-speed behaviour.  Each speed produces one MP4 at
-    # ``source_fps * speed`` frames per second.
-    speeds: list[float] | None = None
+    # Either a list of floats (legacy) or a list of {speed, badge}
+    # objects.  Default [1.0] preserves the original behaviour.
+    speeds: list[EncodeSpeed | float] | None = None
+
+
+def _vf_for(badge_text: str | None) -> str:
+    """Build the ``-vf`` filter chain.  Always pads odd dimensions; if
+    ``badge_text`` is set, additionally burns a 'Nx' label into the
+    top-left corner of the frame."""
+    vf = "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+    if badge_text:
+        # Escape ffmpeg drawtext metacharacters.
+        safe = (badge_text.replace("\\", "\\\\")
+                            .replace(":", "\\:")
+                            .replace("'", r"\\'"))
+        vf += (",drawtext=text='" + safe + "'"
+               ":fontcolor=0x2d0f5a"
+               ":fontsize=h/12"
+               ":box=1:boxcolor=white@1"
+               ":boxborderw=10"
+               ":x=12:y=12")
+    return vf
 
 
 def _encode_one(ffmpeg: str, tmp_dir: str, out_fps: float, out_path: str,
-                 threads: int) -> tuple[str, subprocess.CompletedProcess]:
+                 threads: int, badge_text: str | None) -> tuple[str, subprocess.CompletedProcess]:
     """Encode one MP4 at the given output framerate.  Returns (path, result)."""
     cmd = [
         ffmpeg, "-y",
         "-framerate", str(out_fps),
         "-i", os.path.join(tmp_dir, "frame_%06d.jpg"),
-        "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        "-vf", _vf_for(badge_text),
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         # Cap per-process threads so N parallel encodes don't oversubscribe
         # CPU.  ``threads=0`` lets libx264 pick automatically.
@@ -155,41 +178,46 @@ def encode_export(export_id: str, body: EncodeRequest | None = None):
     except FileNotFoundError as exc:
         raise HTTPException(500, str(exc))
 
-    speeds = (body.speeds if body and body.speeds else [1.0])
-    # Dedup + clip pathological values, preserve client-given order.
+    raw_speeds = (body.speeds if body and body.speeds else [1.0])
+    # Accept either bare floats (legacy) or {speed, badge} objects.
     seen = set()
-    clean_speeds: list[float] = []
-    for s in speeds:
-        try:
-            sv = float(s)
-        except (TypeError, ValueError):
-            continue
+    clean: list[tuple[float, bool]] = []
+    for s in raw_speeds:
+        if isinstance(s, EncodeSpeed):
+            sv, bd = s.speed, bool(s.badge)
+        else:
+            try:
+                sv = float(s)
+            except (TypeError, ValueError):
+                continue
+            bd = False
         if not math.isfinite(sv) or sv <= 0:
             continue
         if sv in seen:
             continue
         seen.add(sv)
-        clean_speeds.append(sv)
-    if not clean_speeds:
-        clean_speeds = [1.0]
+        clean.append((sv, bd))
+    if not clean:
+        clean = [(1.0, False)]
 
     # Pick a per-process thread count that gives each encode roughly an
     # equal share of cores, without oversubscribing.  Minimum of 1.
     n_cores = max(1, (os.cpu_count() or 4))
-    per_threads = max(1, n_cores // max(1, len(clean_speeds)))
+    per_threads = max(1, n_cores // max(1, len(clean)))
 
     jobs = []
-    for sp in clean_speeds:
+    for sp, badge in clean:
         out_fps = float(source_fps) * sp
         out_path = os.path.join(tmp_dir, f"export_{_speed_tag(sp)}.mp4")
-        jobs.append((sp, out_fps, out_path))
+        badge_text = f"{sp:g}x" if badge else None
+        jobs.append((sp, out_fps, out_path, badge_text))
 
     files_out: list[dict] = []
     errors: list[str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as ex:
         futs = {
-            ex.submit(_encode_one, ffmpeg, tmp_dir, of, op, per_threads): sp
-            for sp, of, op in jobs
+            ex.submit(_encode_one, ffmpeg, tmp_dir, of, op, per_threads, bt): sp
+            for sp, of, op, bt in jobs
         }
         for fut in concurrent.futures.as_completed(futs):
             sp = futs[fut]

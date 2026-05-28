@@ -10,14 +10,16 @@
 
     const SPEED_PRESETS = [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 30, 60, 120];
     const SPEED_DEFAULT_IDX = SPEED_PRESETS.indexOf(1);
-    // Maximum number of speeds the user can select for a single export.
-    // Bound by CPU cores in practice — past 4 the parallel encodes start
-    // contending and savings vanish.
+    // Maximum number of speeds queued for a single export.  Bound by
+    // CPU cores — past 4 the parallel encodes start contending.
     const MAX_EXPORT_SPEEDS = 4;
-    // Which speeds the user has ticked for the next export.  Starts on
-    // 1x; updated whenever the speed slider moves so the obvious
-    // playback speed is always pre-selected.
-    let selectedExportSpeeds = new Set([1]);
+    // Ordered queue of {speed, badge} for the next export.  Empty
+    // means "use the current slider speed at export time".
+    let exportSpeedQueue = [];
+    // While a capture/upload/encode is in flight: the primary canvas
+    // remains the user's to browse; capture work uses a hidden bgVideo.
+    let bgVideo = null;
+    let currentVideoUrl = null;
 
     // Transport-glyph rendering differs by OS: Windows draws unicode ←/→
     // as hairlines and ▮▮ as chunky blocks.  Use SVG icons on Windows so
@@ -67,7 +69,6 @@
     let exportRunning = false;
     let exportAbort = null;
     let exportAbortRequested = false;
-    let showSpeedBadge = false;     // "Show #x" checkbox state
     let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
     let cropDragMode = null;
     let cropDragStart = null;
@@ -351,6 +352,7 @@
         currentFrame = 0;
         scale = 1; offsetX = 0; offsetY = 0;
         currentLoaded = null;
+        if (currentVideoUrl) { try { URL.revokeObjectURL(currentVideoUrl); } catch (_) {} currentVideoUrl = null; }
         pendingRecent = null;
         $('frameDisplay').textContent = 0;
         $('totalFramesDisplay').textContent = 0;
@@ -420,7 +422,9 @@
         scale = 1; offsetX = 0; offsetY = 0;
         if (playing) togglePlay();
 
+        if (currentVideoUrl) { try { URL.revokeObjectURL(currentVideoUrl); } catch (_) {} }
         const url = URL.createObjectURL(file);
+        currentVideoUrl = url;
         // Probe duration first, then fps if possible.
         videoEl.src = url;
         videoEl.addEventListener('loadedmetadata', () => {
@@ -510,12 +514,15 @@
             e.target.value = '';
         });
 
-        // "Show #x" checkbox — burns a large speed badge into the
-        // cropped frame (visible in the live view and the export).
-        $('speedBadgeCheckbox').addEventListener('change', e => {
-            showSpeedBadge = !!e.target.checked;
-            render();
-            e.target.blur();
+        // "Add speed" button — queues the slider's current speed for
+        // the next export.  Re-labels to "Set speed" + dims when that
+        // speed is already queued.
+        $('addSpeedBtn').addEventListener('click', () => {
+            if (exportSpeedQueue.some(e => e.speed === playbackRate)) return;
+            if (exportSpeedQueue.length >= MAX_EXPORT_SPEEDS) return;
+            exportSpeedQueue.push({ speed: playbackRate, badge: false });
+            _renderSpeedTags();
+            _updateAddSpeedBtn();
         });
 
         // Recent-videos picker — toggle on click, close on outside click.
@@ -552,8 +559,7 @@
         speedSlider.addEventListener('input', () => {
             playbackRate = SPEED_PRESETS[parseInt(speedSlider.value)];
             $('speedDisplay').textContent = playbackRate + 'x';
-            // Refresh the export-mode speed-badge UI if it's visible.
-            _updateSpeedBadgeUI();
+            _updateAddSpeedBtn();
             if (exportMode) render();
             if (!playing) return;
             // Cancel whichever play mode is currently running, then
@@ -999,43 +1005,6 @@
         }
     }
 
-    /** Draw the optional speed badge — a large, dark-purple "#x" tag
-     *  with a white background — anchored at the top-left of the crop
-     *  rectangle.  Drawn from render() before the orange crop overlay
-     *  so it ends up inside the captured frame during export. */
-    function _drawSpeedBadge() {
-        if (!showSpeedBadge || !exportMode) return;
-        if (!(cropW > 0) || !(cropH > 0)) return;
-        // The badge only makes sense when one (non-1x) speed is being
-        // exported — _updateSpeedBadgeUI hides the checkbox otherwise.
-        const speeds = [...selectedExportSpeeds];
-        if (speeds.length !== 1) return;
-        const speedVal = speeds[0];
-        if (speedVal === 1) return;
-
-        const text = `${speedVal}x`;
-        const fontSize = Math.max(28, Math.min(96, Math.round(cropH * 0.10)));
-        ctx.save();
-        ctx.font = `800 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'left';
-        const padX = Math.round(fontSize * 0.35);
-        const padY = Math.round(fontSize * 0.18);
-        const tw = ctx.measureText(text).width;
-        const bw = tw + padX * 2;
-        const bh = fontSize + padY * 2;
-        const margin = Math.max(8, Math.round(fontSize * 0.25));
-        const x = cropX + margin;
-        const y = cropY + margin;
-        // White background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x, y, bw, bh);
-        // Dark-purple text (matches --btn-text)
-        ctx.fillStyle = '#2d0f5a';
-        ctx.fillText(text, x + padX, y + padY);
-        ctx.restore();
-    }
-
     function _drawCropOverlay() {
         if (!exportMode || exportRunning) return;
         if (!(cropW > 0) || !(cropH > 0)) return;
@@ -1079,7 +1048,6 @@
         ctx.scale(scale, scale);
         ctx.drawImage(videoEl, sx, 0, sw, vidH, 0, 0, sw * bps, vidH * bps);
         ctx.restore();
-        _drawSpeedBadge();          // baked into the captured frames
         _drawCropOverlay();         // visible only when not capturing
     }
 
@@ -1103,77 +1071,65 @@
                 ${GREY} ${bP}%, ${GREY} 100%)`;
     }
 
-    /** Show/hide the "Show #x" checkbox and refresh its label.  Only
-     *  meaningful when exactly one non-1x speed is selected — with
-     *  multiple speeds we can't bake a single badge into the captured
-     *  frames, so the option is disabled. */
-    function _updateSpeedBadgeUI() {
-        const label = $('speedBadgeLabel');
-        const cb    = $('speedBadgeCheckbox');
-        const txt   = $('speedBadgeLabelText');
-        if (!label || !cb || !txt) return;
-        const speeds = [...selectedExportSpeeds];
-        const onlyOne = speeds.length === 1;
-        const single  = onlyOne ? speeds[0] : null;
-        const show = exportMode && onlyOne && single !== 1;
-        label.style.display = show ? 'inline-flex' : 'none';
-        if (show) {
-            txt.textContent = `${single}x`;
-        } else {
-            cb.checked = false;
-            showSpeedBadge = false;
-        }
-    }
-
-    /** Populate the inline "Export speeds" checkbox row.  Called once
-     *  on entering export mode; checkbox state lives in
-     *  ``selectedExportSpeeds`` so re-entering preserves it. */
-    function _buildExportSpeedCheckboxes() {
-        const row = $('exportSpeedsRow');
+    /** Re-render the row of speed-tag pills shown next to the Export
+     *  button in export mode.  Tags carry: the speed, a "print"
+     *  checkbox that bakes a "Nx" badge into THAT speed's output, and
+     *  an × to remove the tag.  Re-renders from ``exportSpeedQueue``. */
+    function _renderSpeedTags() {
+        const row = $('exportSpeedTags');
         if (!row) return;
-        // Wipe any previously-built checkboxes (keep the leading label).
-        row.querySelectorAll('label.speed-cb').forEach(n => n.remove());
-        for (const sp of SPEED_PRESETS) {
-            const lbl = document.createElement('label');
-            lbl.className = 'speed-cb';
-            lbl.title = `Encode an MP4 at ${sp}x`;
+        row.innerHTML = '';
+        for (let i = 0; i < exportSpeedQueue.length; i++) {
+            const entry = exportSpeedQueue[i];
+            const tag = document.createElement('span');
+            tag.className = 'speed-tag';
+            tag.dataset.idx = String(i);
+            const rate = document.createElement('span');
+            rate.className = 'tag-rate';
+            rate.textContent = `${entry.speed}x`;
+            tag.appendChild(rate);
+            const printLbl = document.createElement('label');
+            printLbl.title = 'Burn a "Nx" badge into the top-left of this output';
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.dataset.speed = String(sp);
-            cb.checked = selectedExportSpeeds.has(sp);
+            cb.checked = !!entry.badge;
             cb.addEventListener('change', () => {
-                if (cb.checked) {
-                    if (selectedExportSpeeds.size >= MAX_EXPORT_SPEEDS) {
-                        cb.checked = false;
-                        return;
-                    }
-                    selectedExportSpeeds.add(sp);
-                } else {
-                    selectedExportSpeeds.delete(sp);
-                }
-                _refreshExportSpeedCheckboxes();
-                _updateSpeedBadgeUI();
+                entry.badge = cb.checked;
             });
-            lbl.appendChild(cb);
-            lbl.appendChild(document.createTextNode(`${sp}x`));
-            row.appendChild(lbl);
+            printLbl.appendChild(cb);
+            printLbl.appendChild(document.createTextNode('print'));
+            tag.appendChild(printLbl);
+            const rm = document.createElement('button');
+            rm.className = 'tag-remove';
+            rm.type = 'button';
+            rm.textContent = '×';
+            rm.title = 'Remove this speed';
+            rm.addEventListener('click', () => {
+                exportSpeedQueue.splice(i, 1);
+                _renderSpeedTags();
+                _updateAddSpeedBtn();
+            });
+            tag.appendChild(rm);
+            row.appendChild(tag);
         }
-        _refreshExportSpeedCheckboxes();
     }
 
-    /** Disable the unchecked checkboxes when we've hit the cap so the
-     *  cap is visually obvious instead of silently rejected on click. */
-    function _refreshExportSpeedCheckboxes() {
-        const row = $('exportSpeedsRow');
-        if (!row) return;
-        const atCap = selectedExportSpeeds.size >= MAX_EXPORT_SPEEDS;
-        row.querySelectorAll('label.speed-cb').forEach(lbl => {
-            const cb = lbl.querySelector('input[type="checkbox"]');
-            if (!cb) return;
-            const isChecked = cb.checked;
-            cb.disabled = atCap && !isChecked;
-            lbl.classList.toggle('disabled', cb.disabled);
-        });
+    /** "Add speed" button — dims and reads "Set speed" when the
+     *  current slider value is already queued (or queue is at cap). */
+    function _updateAddSpeedBtn() {
+        const btn = $('addSpeedBtn');
+        if (!btn) return;
+        const queued = exportSpeedQueue.some(e => e.speed === playbackRate);
+        const atCap  = exportSpeedQueue.length >= MAX_EXPORT_SPEEDS;
+        const dim = queued || atCap;
+        btn.textContent = queued ? 'Set speed' : 'Add speed';
+        btn.classList.toggle('dim', dim);
+        btn.disabled = dim || exportRunning;
+        btn.title = atCap
+            ? `At most ${MAX_EXPORT_SPEEDS} speeds per export — remove one first`
+            : (queued
+                ? 'This speed is already queued — change the slider to add another'
+                : 'Queue the current speed for the next export');
     }
 
     function enterExportMode() {
@@ -1196,14 +1152,8 @@
         btn.classList.add('btn-primary');
         $('exportCancelBtn').style.display = '';
         $('exportStatus').textContent = '';
-        // Default-select the current playback speed if nothing's ticked
-        // (or only a stale entry from a prior export).
-        if (selectedExportSpeeds.size === 0 ||
-            (selectedExportSpeeds.size === 1 && !SPEED_PRESETS.includes([...selectedExportSpeeds][0]))) {
-            selectedExportSpeeds = new Set([playbackRate]);
-        }
-        _buildExportSpeedCheckboxes();
-        _updateSpeedBadgeUI();
+        _renderSpeedTags();
+        _updateAddSpeedBtn();
         _resetCropToView();
         render();
     }
@@ -1219,9 +1169,9 @@
         btn.disabled = false;
         $('exportCancelBtn').style.display = 'none';
         $('exportStatus').textContent = '';
-        const row = $('exportSpeedsRow');
-        if (row) row.querySelectorAll('label.speed-cb').forEach(n => n.remove());
-        _updateSpeedBadgeUI();          // hides the label, clears the flag
+        $('addSpeedBtn').style.display = 'none';
+        $('exportSpeedTags').style.display = 'none';
+        $('exportSpeedTags').innerHTML = '';
         cropDragMode = null;
         cropDragStart = null;
         canvas.style.cursor = '';
@@ -1285,17 +1235,14 @@
         if (endFrame <= startFrame) { alert('Trim range is empty'); return; }
         const totalFrames = endFrame - startFrame + 1;
 
-        // Selected output speeds, sorted ascending so the resulting
-        // files line up with the checkbox row visually.
-        const speeds = [...selectedExportSpeeds].sort((a, b) => a - b);
-        if (speeds.length === 0) {
-            alert('Pick at least one export speed.');
-            return;
-        }
-        if (speeds.length > MAX_EXPORT_SPEEDS) {
-            alert(`At most ${MAX_EXPORT_SPEEDS} speeds at a time.`);
-            return;
-        }
+        // Resolve the speed queue.  Empty → use the slider's current
+        // speed (with no badge).  Ascending order so output files line
+        // up with the displayed tags.
+        let queue = exportSpeedQueue.slice();
+        if (!queue.length) queue = [{ speed: playbackRate, badge: false }];
+        queue.sort((a, b) => a.speed - b.speed);
+        if (queue.length > MAX_EXPORT_SPEEDS) queue = queue.slice(0, MAX_EXPORT_SPEEDS);
+        const speeds = queue.map(q => q.speed);
 
         // Prompt for save destinations FIRST — one per speed, all
         // chained off the single Export click's user activation.  If
@@ -1313,10 +1260,10 @@
         const trimTag  = isFullRange ? '' : `_trim${startFrame}-${endFrame}`;
         const speedTag = (sp) => (sp === 1) ? '' : `_${sp}x`;
 
-        const saveHandles = [];  // parallel to `speeds`
+        const saveHandles = [];  // parallel to `queue`
         try {
-            for (const sp of speeds) {
-                const name = `${stem}${camTag}${cropTag}${speedTag(sp)}${trimTag}.mp4`;
+            for (const q of queue) {
+                const name = `${stem}${camTag}${cropTag}${speedTag(q.speed)}${trimTag}.mp4`;
                 const h = await window.showSaveFilePicker({
                     suggestedName: name,
                     types: [{ description: 'MP4 video',
@@ -1326,8 +1273,6 @@
             }
         } catch (err) {
             if (err && err.name === 'AbortError') {
-                // User cancelled mid-picker — drop any handles already
-                // created so we don't leave zero-byte files behind.
                 for (const h of saveHandles) {
                     if (h && typeof h.remove === 'function') {
                         try { await h.remove(); } catch (_) {}
@@ -1338,6 +1283,14 @@
             alert('Could not open save dialog: ' + err.message);
             return;
         }
+
+        // The job is committed — clear the queued tags from the UI so
+        // the user doesn't think they're still pending for the next
+        // export.  Tags are gone, but `queue` (local copy) drives the
+        // job below.
+        exportSpeedQueue = [];
+        _renderSpeedTags();
+        _updateAddSpeedBtn();
 
         const status = $('exportStatus');
         const btn = $('exportBtn');
@@ -1352,13 +1305,67 @@
             if (exportAbortRequested) throw new DOMException('Cancelled', 'AbortError');
         };
 
-        const savedFrame = currentFrame;
+        // Crop rectangle, captured before the user is free to roam.
         const cx = Math.max(0, Math.round(cropX));
         const cy = Math.max(0, Math.round(cropY));
         let cw = Math.min(canvas.width  - cx, Math.round(cropW));
         let ch = Math.min(canvas.height - cy, Math.round(cropH));
         if (cw % 2) cw -= 1;
         if (ch % 2) ch -= 1;
+
+        // Background capture rig.  A second hidden <video> sharing the
+        // current blob URL lets us seek independently of the user's
+        // view, so they can keep browsing while frames are captured.
+        const bg = document.createElement('video');
+        bg.muted = true;
+        bg.preload = 'auto';
+        bg.crossOrigin = 'anonymous';
+        bg.src = currentVideoUrl;
+        bgVideo = bg;
+        await new Promise((resolve, reject) => {
+            const onErr = () => reject(new Error('background video failed to load'));
+            if (bg.readyState >= 2) return resolve();
+            bg.addEventListener('loadeddata', () => resolve(), { once: true });
+            bg.addEventListener('error', onErr, { once: true });
+        });
+
+        // Dedicated rendering canvas for the background pipeline — its
+        // size matches the source half (or full frame), then the user-
+        // selected crop is read out into the upload-sized canvas.
+        const srcW = isStereo ? Math.round(vidW / 2) : vidW;
+        const srcH = vidH;
+        // Mapping from main-canvas crop coords back to source pixels:
+        // the main canvas draws `srcW × srcH` into the on-screen
+        // metrics; replay that on the bg canvas at native source size.
+        const baseMetrics = getBaseMetrics();
+        const bgCanvas = document.createElement('canvas');
+        bgCanvas.width = srcW; bgCanvas.height = srcH;
+        const bgCtx = bgCanvas.getContext('2d');
+        // Project the user's on-screen crop rect into source pixels.
+        const _toSrc = (px, py, pw, ph) => {
+            const { bps, baseOX, baseOY } = baseMetrics;
+            const sx0 = Math.max(0, (px - baseOX - offsetX) / scale / bps);
+            const sy0 = Math.max(0, (py - baseOY - offsetY) / scale / bps);
+            const sw0 = Math.max(2, pw / scale / bps);
+            const sh0 = Math.max(2, ph / scale / bps);
+            return [Math.round(sx0), Math.round(sy0),
+                    Math.min(srcW - Math.round(sx0), Math.round(sw0)),
+                    Math.min(srcH - Math.round(sy0), Math.round(sh0))];
+        };
+        let [srcCx, srcCy, srcCw, srcCh] = _toSrc(cx, cy, cw, ch);
+        if (srcCw % 2) srcCw -= 1;
+        if (srcCh % 2) srcCh -= 1;
+
+        const offscreen = document.createElement('canvas');
+        offscreen.width = cw; offscreen.height = ch;
+        const offCtx = offscreen.getContext('2d');
+
+        const _bgSeek = (f) => new Promise((resolve) => {
+            const t = (Math.max(0, Math.min(f, nFrames - 1)) + 0.5) / fps;
+            const done = () => resolve();
+            bg.addEventListener('seeked', done, { once: true });
+            bg.currentTime = t;
+        });
 
         let exportId = null;
         let handlesToCleanup = [...saveHandles];
@@ -1367,9 +1374,6 @@
             const startResp = await fetch('/api/export-video/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                // Send the SOURCE fps; the server multiplies by each
-                // requested speed at encode time so frames are captured
-                // and uploaded exactly once regardless of speed count.
                 body: JSON.stringify({
                     fps: fps, width: cw, height: ch, total_frames: totalFrames,
                 }),
@@ -1378,11 +1382,7 @@
             if (!startResp.ok) throw new Error('start session failed');
             exportId = (await startResp.json()).export_id;
 
-            const offscreen = document.createElement('canvas');
-            offscreen.width = cw; offscreen.height = ch;
-            const offCtx = offscreen.getContext('2d');
-            const BATCH = 100;
-
+            const BATCH = 60;
             for (let batchStart = startFrame; batchStart <= endFrame; batchStart += BATCH) {
                 _checkAbort();
                 const batchEnd = Math.min(batchStart + BATCH - 1, endFrame);
@@ -1390,15 +1390,26 @@
                 fd.append('start_index', batchStart - startFrame);
                 for (let f = batchStart; f <= batchEnd; f++) {
                     _checkAbort();
-                    await seekAndRenderFrame(f);
+                    await _bgSeek(f);
+                    // Draw the requested camera half from bgVideo onto
+                    // bgCanvas, then crop onto offscreen.
+                    const sxFull = isStereo
+                        ? (currentSide === cameraNames[0] ? 0 : srcW)
+                        : 0;
+                    bgCtx.drawImage(bg, sxFull, 0, srcW, srcH, 0, 0, srcW, srcH);
                     offCtx.fillStyle = '#000';
                     offCtx.fillRect(0, 0, cw, ch);
-                    offCtx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
+                    // Source crop → destination size (cw x ch).
+                    offCtx.drawImage(bgCanvas, srcCx, srcCy, srcCw, srcCh,
+                                                 0, 0, cw, ch);
                     const blob = await new Promise(r => offscreen.toBlob(r, 'image/jpeg', 0.92));
                     const globalIdx = f - startFrame;
                     fd.append(`frame_${f - batchStart}`, blob,
                               `frame_${String(globalIdx).padStart(6, '0')}.jpg`);
                     status.textContent = `Capturing ${f - startFrame + 1} / ${totalFrames}`;
+                    // Yield to the event loop so user input stays
+                    // responsive on every frame.
+                    await new Promise(r => setTimeout(r, 0));
                 }
                 _checkAbort();
                 status.textContent = `Uploading batch…`;
@@ -1415,7 +1426,9 @@
             const encResp = await fetch(`/api/export-video/${exportId}/encode`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ speeds }),
+                body: JSON.stringify({
+                    speeds: queue.map(q => ({ speed: q.speed, badge: !!q.badge })),
+                }),
                 signal: exportAbort.signal,
             });
             if (!encResp.ok) throw new Error('encoding failed');
@@ -1423,16 +1436,13 @@
             const files = encInfo.files || [];
             if (!files.length) throw new Error('encoder produced no files');
 
-            // Map speed → produced file name so we can pair them with
-            // the user-picked save handles (which are also in
-            // ascending-speed order).
             const fileBySpeed = new Map(files.map(f => [f.speed, f.name]));
-            for (let i = 0; i < speeds.length; i++) {
+            for (let i = 0; i < queue.length; i++) {
                 _checkAbort();
-                const sp = speeds[i];
+                const sp = queue[i].speed;
                 const name = fileBySpeed.get(sp);
                 if (!name) throw new Error(`server didn't return file for ${sp}x`);
-                status.textContent = `Saving ${i + 1} / ${speeds.length} (${sp}x)…`;
+                status.textContent = `Saving ${i + 1} / ${queue.length} (${sp}x)…`;
                 const dlResp = await fetch(
                     `/api/export-video/${exportId}/file/${encodeURIComponent(name)}`,
                     { signal: exportAbort.signal });
@@ -1441,13 +1451,11 @@
                 const writable = await saveHandles[i].createWritable();
                 await writable.write(blob);
                 await writable.close();
-                handlesToCleanup[i] = null;        // committed
+                handlesToCleanup[i] = null;
             }
-            status.textContent = (speeds.length === 1)
+            status.textContent = (queue.length === 1)
                 ? `Saved to ${saveHandles[0].name}.`
-                : `Saved ${speeds.length} files.`;
-            // Server cleanup — encode endpoint leaves files until we
-            // DELETE so the client can fetch them; do that now.
+                : `Saved ${queue.length} files.`;
             fetch(`/api/export-video/${exportId}`, { method: 'DELETE' }).catch(() => {});
             exportId = null;
         } catch (err) {
@@ -1460,22 +1468,21 @@
             if (exportId) {
                 fetch(`/api/export-video/${exportId}`, { method: 'DELETE' }).catch(() => {});
             }
-            // Any save handle whose file we never wrote may exist as a
-            // zero-byte stub (showSaveFilePicker creates it on
-            // confirmation).  Best-effort remove.
             for (const h of handlesToCleanup) {
                 if (h && typeof h.remove === 'function') {
                     try { await h.remove(); } catch (_) {}
                 }
             }
         } finally {
+            try { bg.pause(); bg.removeAttribute('src'); bg.load(); } catch (_) {}
+            bgVideo = null;
             exportRunning = false;
             exportAbort = null;
             const wasAborted = exportAbortRequested;
             exportAbortRequested = false;
             btn.disabled = false;
             cancelBtn.disabled = false;
-            goToFrame(savedFrame);
+            _updateAddSpeedBtn();
             if (wasAborted) exitExportMode();
         }
     }

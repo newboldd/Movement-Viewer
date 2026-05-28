@@ -287,33 +287,57 @@ body.export-mode #timelineSlider::-moz-range-thumb {
     pointer-events: none;
 }
 
-/* Export-mode tints.  The speed slider stays in its normal colour
-   because output speed is now selected via the inline checkboxes
-   below — not the live-playback slider. */
-body.export-mode #exportSpeedsRow {
+/* Export-mode tints */
+body.export-mode #speedSlider { accent-color: var(--lime); }
+body.export-mode #speedDisplay,
+body.export-mode .speed-wrap label { color: var(--lime); }
+
+/* Inline speed-queue tags shown next to the Export button. */
+body.export-mode #addSpeedBtn,
+body.export-mode #exportSpeedTags {
     display: inline-flex !important;
+    align-items: center;
 }
-#exportSpeedsRow label {
+.speed-tag {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     font-size: 12px;
-    color: var(--text-muted);
-    padding: 1px 4px;
-    border-radius: 3px;
+    color: var(--lime);
+    background: rgba(166, 222, 27, 0.12);
+    border: 1px solid var(--lime);
+    border-radius: 10px;
+    padding: 1px 6px 1px 8px;
+    white-space: nowrap;
+}
+.speed-tag .tag-rate { font-weight: 600; }
+.speed-tag label {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     cursor: pointer;
     user-select: none;
+    color: var(--lime);
+    margin-left: 2px;
 }
-#exportSpeedsRow input[type="checkbox"] {
+.speed-tag label input[type="checkbox"] {
     margin: 0;
     accent-color: var(--lime);
 }
-#exportSpeedsRow label:has(input:checked) {
+.speed-tag .tag-remove {
+    margin-left: 2px;
+    cursor: pointer;
+    background: none;
+    border: none;
     color: var(--lime);
-    font-weight: 600;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
 }
-#exportSpeedsRow label.disabled {
-    opacity: 0.35;
+.speed-tag .tag-remove:hover { color: #fff; background: var(--lime); border-radius: 2px; }
+#addSpeedBtn[disabled],
+#addSpeedBtn.dim {
+    opacity: 0.45;
     cursor: not-allowed;
 }
 body.export-mode #exportBtn {
