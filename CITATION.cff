@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "Movement Viewer"
+abstract: >
+  A standalone stereo / mono video browser with frame-accurate scrubbing,
+  variable playback speed (0.01x to 120x), zoom + pan, and trim + crop +
+  re-encode export to MP4.  Designed for clinical research where a quick
+  visual review of finger-tapping or gait videos is needed without any
+  database, subject management, or computer-vision pipeline.
+authors:
+  - family-names: Newbold
+    given-names: Dillan
+repository-code: https://github.com/newboldd/Movement-Viewer
+license: BUSL-1.1
+type: software
