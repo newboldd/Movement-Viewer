@@ -16,9 +16,6 @@
     // Ordered queue of {speed, badge} for the next export.  Empty
     // means "use the current slider speed at export time".
     let exportSpeedQueue = [];
-    // While a capture/upload/encode is in flight: the primary canvas
-    // remains the user's to browse; capture work uses a hidden bgVideo.
-    let bgVideo = null;
     let currentVideoUrl = null;
 
     // Transport-glyph rendering differs by OS: Windows draws unicode ←/→
@@ -211,6 +208,9 @@
     // (name, size) of the currently loaded file — used to drive the
     // dropdown selection and to scope stereo-checkbox writes.
     let currentLoaded = null;       // { name, size } or null
+    // The loaded File object itself — export uploads its raw bytes to
+    // the server once (cached there) so ffmpeg can encode directly.
+    let currentFile = null;
     // Set when the user is mid-load via the recents dropdown or via
     // Load Video.  Carries the saved stereo flag and any new
     // FileSystemFileHandle to persist on the next touch().
@@ -551,6 +551,7 @@
             // we have one) so the dropdown can re-open it directly next
             // time.  Then refresh the dropdown to put it at the top.
             currentLoaded = { name: file.name, size: file.size };
+            currentFile = file;
             RecentVideos.touch(file.name, file.size, isStereo, savedHandle)
                         .then(_refreshRecentDropdown);
             // Seek to mid-first-frame (t=0 is often un-decodable).
@@ -1328,6 +1329,34 @@
         });
     }
 
+    // Upload the source video's raw bytes with progress.  XHR because
+    // fetch() has no upload-progress events.
+    function _uploadSource(file, key, statusEl) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const url = `/api/export-video/source/upload?key=${encodeURIComponent(key)}`
+                      + `&name=${encodeURIComponent(file.name)}`;
+            xhr.open('POST', url);
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round(e.loaded / e.total * 100);
+                    statusEl.textContent = `Uploading source… ${pct}%`;
+                }
+            };
+            xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+                ? resolve()
+                : reject(new Error(`source upload failed (${xhr.status})`));
+            xhr.onerror = () => reject(new Error('source upload failed'));
+            xhr.onabort = () => reject(new DOMException('Cancelled', 'AbortError'));
+            if (exportAbort) {
+                exportAbort.signal.addEventListener('abort', () => xhr.abort(),
+                                                    { once: true });
+            }
+            statusEl.textContent = 'Uploading source…';
+            xhr.send(file);
+        });
+    }
+
     async function runExport() {
         if (exportRunning) return;
         const tA = parseInt($('trimStart').value);
@@ -1421,35 +1450,12 @@
         if (cw % 2) cw -= 1;
         if (ch % 2) ch -= 1;
 
-        // Background capture rig.  A second hidden <video> sharing the
-        // current blob URL lets us seek independently of the user's
-        // view, so they can keep browsing while frames are captured.
-        const bg = document.createElement('video');
-        bg.muted = true;
-        bg.preload = 'auto';
-        bg.crossOrigin = 'anonymous';
-        bg.src = currentVideoUrl;
-        bgVideo = bg;
-        await new Promise((resolve, reject) => {
-            const onErr = () => reject(new Error('background video failed to load'));
-            if (bg.readyState >= 2) return resolve();
-            bg.addEventListener('loadeddata', () => resolve(), { once: true });
-            bg.addEventListener('error', onErr, { once: true });
-        });
-
-        // Dedicated rendering canvas for the background pipeline — its
-        // size matches the source half (or full frame), then the user-
-        // selected crop is read out into the upload-sized canvas.
+        // Project the on-screen crop rect into source pixels — ffmpeg
+        // crops the ORIGINAL video server-side, so exports come out at
+        // native source resolution (no canvas resample).
         const srcW = isStereo ? Math.round(vidW / 2) : vidW;
         const srcH = vidH;
-        // Mapping from main-canvas crop coords back to source pixels:
-        // the main canvas draws `srcW × srcH` into the on-screen
-        // metrics; replay that on the bg canvas at native source size.
         const baseMetrics = getBaseMetrics();
-        const bgCanvas = document.createElement('canvas');
-        bgCanvas.width = srcW; bgCanvas.height = srcH;
-        const bgCtx = bgCanvas.getContext('2d');
-        // Project the user's on-screen crop rect into source pixels.
         const _toSrc = (px, py, pw, ph) => {
             const { bps, baseOX, baseOY } = baseMetrics;
             const sx0 = Math.max(0, (px - baseOX - offsetX) / scale / bps);
@@ -1463,69 +1469,43 @@
         let [srcCx, srcCy, srcCw, srcCh] = _toSrc(cx, cy, cw, ch);
         if (srcCw % 2) srcCw -= 1;
         if (srcCh % 2) srcCh -= 1;
-
-        const offscreen = document.createElement('canvas');
-        offscreen.width = cw; offscreen.height = ch;
-        const offCtx = offscreen.getContext('2d');
-
-        const _bgSeek = (f) => new Promise((resolve) => {
-            const t = (Math.max(0, Math.min(f, nFrames - 1)) + 0.5) / fps;
-            const done = () => resolve();
-            bg.addEventListener('seeked', done, { once: true });
-            bg.currentTime = t;
-        });
+        // Stereo: shift the crop into the requested half of the full frame.
+        const sxFull = isStereo && currentSide !== cameraNames[0] ? srcW : 0;
+        const cropBody = { x: sxFull + srcCx, y: srcCy, w: srcCw, h: srcCh };
 
         let exportId = null;
         let handlesToCleanup = [...saveHandles];
         try {
             _checkAbort();
+            if (!currentFile) {
+                throw new Error('source file unavailable — reload the video');
+            }
+            // Upload the source once; the server caches it by
+            // name+size+mtime so later exports of the same file skip this.
+            const srcKey = `${currentFile.name}|${currentFile.size}|${currentFile.lastModified}`;
+            const chkResp = await fetch('/api/export-video/source/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: srcKey }),
+                signal: exportAbort.signal,
+            });
+            if (!chkResp.ok) throw new Error('source check failed');
+            if (!(await chkResp.json()).cached) {
+                await _uploadSource(currentFile, srcKey, status);
+            }
+            _checkAbort();
+
             const startResp = await fetch('/api/export-video/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    fps: fps, width: cw, height: ch, total_frames: totalFrames,
+                    fps: fps, width: srcCw, height: srcCh,
+                    total_frames: totalFrames,
                 }),
                 signal: exportAbort.signal,
             });
             if (!startResp.ok) throw new Error('start session failed');
             exportId = (await startResp.json()).export_id;
-
-            const BATCH = 60;
-            for (let batchStart = startFrame; batchStart <= endFrame; batchStart += BATCH) {
-                _checkAbort();
-                const batchEnd = Math.min(batchStart + BATCH - 1, endFrame);
-                const fd = new FormData();
-                fd.append('start_index', batchStart - startFrame);
-                for (let f = batchStart; f <= batchEnd; f++) {
-                    _checkAbort();
-                    await _bgSeek(f);
-                    // Draw the requested camera half from bgVideo onto
-                    // bgCanvas, then crop onto offscreen.
-                    const sxFull = isStereo
-                        ? (currentSide === cameraNames[0] ? 0 : srcW)
-                        : 0;
-                    bgCtx.drawImage(bg, sxFull, 0, srcW, srcH, 0, 0, srcW, srcH);
-                    offCtx.fillStyle = '#000';
-                    offCtx.fillRect(0, 0, cw, ch);
-                    // Source crop → destination size (cw x ch).
-                    offCtx.drawImage(bgCanvas, srcCx, srcCy, srcCw, srcCh,
-                                                 0, 0, cw, ch);
-                    const blob = await new Promise(r => offscreen.toBlob(r, 'image/jpeg', 0.92));
-                    const globalIdx = f - startFrame;
-                    fd.append(`frame_${f - batchStart}`, blob,
-                              `frame_${String(globalIdx).padStart(6, '0')}.jpg`);
-                    status.textContent = `Capturing ${f - startFrame + 1} / ${totalFrames}`;
-                    // Yield to the event loop so user input stays
-                    // responsive on every frame.
-                    await new Promise(r => setTimeout(r, 0));
-                }
-                _checkAbort();
-                status.textContent = `Uploading batch…`;
-                const upResp = await fetch(`/api/export-video/${exportId}/frames`, {
-                    method: 'POST', body: fd, signal: exportAbort.signal,
-                });
-                if (!upResp.ok) throw new Error('frame upload failed');
-            }
 
             _checkAbort();
             status.textContent = speeds.length > 1
@@ -1533,17 +1513,34 @@
                 : 'Encoding…';
             const stampFrame = !!$('stampFrameNumber')?.checked;
             const stampSecs  = !!$('stampTime')?.checked;
-            const encResp = await fetch(`/api/export-video/${exportId}/encode`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    speeds: queue.map(q => ({ speed: q.speed, badge: !!q.badge })),
-                    show_frame_num: stampFrame,
-                    show_time: stampSecs,
-                    start_frame_idx: startFrame,
-                }),
-                signal: exportAbort.signal,
-            });
+            // Poll encode progress while the encode request is in flight.
+            const pollTimer = setInterval(async () => {
+                try {
+                    const r = await fetch(`/api/export-video/${exportId}/status`);
+                    if (!r.ok) return;
+                    const pct = Math.round(((await r.json()).progress || 0) * 100);
+                    if (pct > 0) status.textContent = `Encoding… ${pct}%`;
+                } catch (_) {}
+            }, 500);
+            let encResp;
+            try {
+                encResp = await fetch(`/api/export-video/${exportId}/encode-direct`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        key: srcKey,
+                        start_frame: startFrame,
+                        end_frame: endFrame,
+                        crop: cropBody,
+                        speeds: queue.map(q => ({ speed: q.speed, badge: !!q.badge })),
+                        show_frame_num: stampFrame,
+                        show_time: stampSecs,
+                    }),
+                    signal: exportAbort.signal,
+                });
+            } finally {
+                clearInterval(pollTimer);
+            }
             if (!encResp.ok) throw new Error('encoding failed');
             const encInfo = await encResp.json();
             const files = encInfo.files || [];
@@ -1587,8 +1584,6 @@
                 }
             }
         } finally {
-            try { bg.pause(); bg.removeAttribute('src'); bg.load(); } catch (_) {}
-            bgVideo = null;
             exportRunning = false;
             exportAbort = null;
             const wasAborted = exportAbortRequested;
