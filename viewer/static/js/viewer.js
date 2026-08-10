@@ -986,8 +986,29 @@
     function sizeCanvas() {
         const vp = canvas.parentElement;
         if (!vp) return;
+        if (canvas.width === vp.clientWidth &&
+            canvas.height === vp.clientHeight) return;
+        // The crop box is stored in canvas pixels but means a region of
+        // the VIDEO — when the canvas resizes (window resize, control
+        // bar wrapping to a second line) the video re-fits, so remap the
+        // box through source coords to keep it glued to the same
+        // content.  Pan/zoom deliberately do NOT move the box; only
+        // resizes remap it.
+        const before = getBaseMetrics();
         canvas.width  = vp.clientWidth;
         canvas.height = vp.clientHeight;
+        if (cropW > 0 && cropH > 0 && before.bps > 0) {
+            const after = getBaseMetrics();
+            if (after.bps > 0) {
+                const r = after.bps / before.bps;
+                cropX = after.baseOX + offsetX
+                      + (cropX - before.baseOX - offsetX) * r;
+                cropY = after.baseOY + offsetY
+                      + (cropY - before.baseOY - offsetY) * r;
+                cropW *= r;
+                cropH *= r;
+            }
+        }
     }
 
     // ── Crop overlay ─────────────────────────────────────────
@@ -1443,10 +1464,14 @@
         };
 
         // Crop rectangle, captured before the user is free to roam.
-        const cx = Math.max(0, Math.round(cropX));
-        const cy = Math.max(0, Math.round(cropY));
-        const cw = Math.min(canvas.width  - cx, Math.round(cropW));
-        const ch = Math.min(canvas.height - cy, Math.round(cropH));
+        // Deliberately NOT clamped to the canvas: the box is the user's
+        // framing of the VIDEO, and the server pads anything outside the
+        // frame — clamping to the (resizable) canvas would clip one
+        // dimension and change the output's shape.
+        const cx = Math.round(cropX);
+        const cy = Math.round(cropY);
+        const cw = Math.round(cropW);
+        const ch = Math.round(cropH);
 
         // Project the on-screen crop rect into source pixels — ffmpeg
         // crops the ORIGINAL video server-side, so exports come out at
