@@ -1445,38 +1445,45 @@
         // Crop rectangle, captured before the user is free to roam.
         const cx = Math.max(0, Math.round(cropX));
         const cy = Math.max(0, Math.round(cropY));
-        let cw = Math.min(canvas.width  - cx, Math.round(cropW));
-        let ch = Math.min(canvas.height - cy, Math.round(cropH));
-        if (cw % 2) cw -= 1;
-        if (ch % 2) ch -= 1;
+        const cw = Math.min(canvas.width  - cx, Math.round(cropW));
+        const ch = Math.min(canvas.height - cy, Math.round(cropH));
 
         // Project the on-screen crop rect into source pixels — ffmpeg
         // crops the ORIGINAL video server-side, so exports come out at
-        // native source resolution (no canvas resample).
+        // native source resolution (no canvas resample).  The video pans
+        // and zooms freely beneath the fixed crop frame, so the box may
+        // overhang the frame; the export keeps the BOX's shape — the
+        // in-frame part is cropped and any overhang is padded black,
+        // exactly as drawn on screen.
         const srcW = isStereo ? Math.round(vidW / 2) : vidW;
         const srcH = vidH;
-        const baseMetrics = getBaseMetrics();
-        const _toSrc = (px, py, pw, ph) => {
-            const { bps, baseOX, baseOY } = baseMetrics;
-            const sx0 = Math.max(0, (px - baseOX - offsetX) / scale / bps);
-            const sy0 = Math.max(0, (py - baseOY - offsetY) / scale / bps);
-            const sw0 = Math.max(2, pw / scale / bps);
-            const sh0 = Math.max(2, ph / scale / bps);
-            return [Math.round(sx0), Math.round(sy0),
-                    Math.min(srcW - Math.round(sx0), Math.round(sw0)),
-                    Math.min(srcH - Math.round(sy0), Math.round(sh0))];
-        };
-        let [srcCx, srcCy, srcCw, srcCh] = _toSrc(cx, cy, cw, ch);
-        if (srcCw % 2) srcCw -= 1;
-        if (srcCh % 2) srcCh -= 1;
+        const { bps, baseOX, baseOY } = getBaseMetrics();
+        const denom = scale * bps;
+        // Box in source-half pixels, unclamped.  Even-aligned so the
+        // crop/pad geometry stays chroma-safe for yuv420.
+        const bx = Math.round((cx - baseOX - offsetX) / denom) & ~1;
+        const by = Math.round((cy - baseOY - offsetY) / denom) & ~1;
+        const bw = Math.max(2, Math.round(cw / denom)) & ~1;
+        const bh = Math.max(2, Math.round(ch / denom)) & ~1;
+        // Visible part of the box: its intersection with the frame.
+        const ix = Math.max(0, bx);
+        const iy = Math.max(0, by);
+        const iw = (Math.min(srcW, bx + bw) - ix) & ~1;
+        const ih = (Math.min(srcH, by + bh) - iy) & ~1;
         // Stereo: shift the crop into the requested half of the full frame.
         const sxFull = isStereo && currentSide !== cameraNames[0] ? srcW : 0;
-        const cropBody = { x: sxFull + srcCx, y: srcCy, w: srcCw, h: srcCh };
+        const cropBody = {
+            x: sxFull + ix, y: iy, w: iw, h: ih,
+            pad_w: bw, pad_h: bh, pad_x: ix - bx, pad_y: iy - by,
+        };
 
         let exportId = null;
         let handlesToCleanup = [...saveHandles];
         try {
             _checkAbort();
+            if (iw < 2 || ih < 2) {
+                throw new Error('crop box is entirely outside the video frame — pan the video back under it');
+            }
             if (!currentFile) {
                 throw new Error('source file unavailable — reload the video');
             }
@@ -1499,7 +1506,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    fps: fps, width: srcCw, height: srcCh,
+                    fps: fps, width: bw, height: bh,
                     total_frames: totalFrames,
                 }),
                 signal: exportAbort.signal,

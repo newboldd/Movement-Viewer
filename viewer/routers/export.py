@@ -173,16 +173,22 @@ def _esc(text: str) -> str:
 
 
 def _build_vf(crop: tuple[int, int, int, int] | None,
+              pad: tuple[int, int, int, int] | None,
               speed: float,
               badge_text: str | None,
               show_frame_num: bool,
               show_time: bool,
               start_frame_idx: int,
               client_fps: float) -> str:
-    """Build the ``-vf`` chain: crop → frame# → setpts (speed) → pad → rest.
+    """Build the ``-vf`` chain: crop → pad → frame# → setpts (speed) → rest.
 
     - ``crop`` is (w, h, x, y) in source pixels (includes the stereo-half
       offset), or None for the full frame.
+    - ``pad`` is (w, h, x, y): the full on-screen crop-box size and where
+      the cropped pixels sit inside it.  The client's crop box may
+      overhang the video frame (the video pans/zooms beneath the fixed
+      box); the crop is clamped to real pixels and this pad restores the
+      box's shape with black bars, so output matches what was drawn.
     - ``speed`` scales presentation timestamps (0.05 → 20x slow motion).
       Timing survives to the muxer because the encode runs ``-vsync vfr``.
     - ``badge_text`` (e.g. ``'0.5x'``) → big white box in the top-left.
@@ -199,6 +205,9 @@ def _build_vf(crop: tuple[int, int, int, int] | None,
     if crop:
         cw, ch, cx, cy = crop
         parts.append(f"crop={cw}:{ch}:{cx}:{cy}")
+    if pad:
+        pw, ph, px, py = pad
+        parts.append(f"pad={pw}:{ph}:{px}:{py}:black")
     if show_frame_num:
         # %{eif:expr:d} formats expr as int; t = seconds since trim start.
         expr = f"%{{eif\\:trunc(t*{client_fps:g})+{int(start_frame_idx)}\\:d}}"
@@ -276,7 +285,9 @@ def encode_direct(export_id: str, body: dict = Body(...)):
         {
           "key": "<source cache key>",
           "start_frame": 0, "end_frame": 100,        // inclusive
-          "crop": {"x":0,"y":0,"w":960,"h":540},     // source px, optional
+          "crop": {"x":0,"y":0,"w":960,"h":540,      // source px, optional
+                   "pad_w":960,"pad_h":540,          //   full box size and
+                   "pad_x":0,"pad_y":0},             //   crop offset in it
           "speeds": [{"speed": 1.0, "badge": false}, ...],
           "show_frame_num": false,
           "show_time": false
@@ -313,6 +324,7 @@ def encode_direct(export_id: str, body: dict = Body(...)):
     meta["total_frames"] = max(1, round(n_frames * real_fps / source_fps))
 
     crop = None
+    pad = None
     c = body.get("crop")
     if isinstance(c, dict):
         try:
@@ -327,6 +339,18 @@ def encode_direct(export_id: str, body: dict = Body(...)):
         if cw < 2 or ch < 2 or cx < 0 or cy < 0:
             raise HTTPException(400, "Bad crop")
         crop = (cw, ch, cx, cy)
+        # Optional pad: restore the full crop-box shape when the box
+        # overhangs the frame (black bars where there was no video).
+        if "pad_w" in c or "pad_h" in c:
+            try:
+                pw, ph = int(c["pad_w"]), int(c["pad_h"])
+                px, py = int(c.get("pad_x", 0)), int(c.get("pad_y", 0))
+            except (KeyError, TypeError, ValueError):
+                raise HTTPException(400, "Bad crop pad")
+            if px < 0 or py < 0 or pw < px + cw or ph < py + ch:
+                raise HTTPException(400, "Bad crop pad")
+            if (pw, ph, px, py) != (cw, ch, 0, 0):
+                pad = (pw, ph, px, py)
 
     show_frame_num = bool(body.get("show_frame_num", False))
     show_time = bool(body.get("show_time", False))
@@ -366,7 +390,7 @@ def encode_direct(export_id: str, body: dict = Body(...)):
         out_path = os.path.join(tmp_dir, f"export_{_speed_tag(sp)}.mp4")
         prog_path = os.path.join(tmp_dir, f"prog_{_speed_tag(sp)}.txt")
         badge_text = f"{sp:g}x" if badge else None
-        vf = _build_vf(crop, sp, badge_text, show_frame_num, show_time,
+        vf = _build_vf(crop, pad, sp, badge_text, show_frame_num, show_time,
                        start_frame, source_fps)
         jobs.append((sp, out_path, prog_path, vf, real_fps * sp))
         prog_files.append(prog_path)
